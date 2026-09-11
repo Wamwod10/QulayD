@@ -1,0 +1,16 @@
+.qp-yandex-map { position: relative; width: 100%; min-height: 320px; overflow: hidden; background: #eef4f0; border: 1px solid var(--qp-border); border-radius: var(--qp-card-radius); }
+.qp-yandex-map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.qp-yandex-map-state { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--qp-text-2); background: color-mix(in srgb,var(--qp-bg-surface) 92%,transparent); backdrop-filter: blur(8px); }
+.qp-yandex-map-state strong { font-size: 14px; color: var(--qp-text); }
+.qp-yandex-map-state span { font-size: 12px; color: var(--qp-muted); }
+.qp-yandex-map-state.error svg { color: var(--qp-danger); }
+.qp-yandex-map-fallback { position: absolute; inset: 0; padding: 26px; display: grid; grid-template-columns: minmax(0,1.2fr) minmax(240px,.8fr); gap: 22px; align-items: center; background: radial-gradient(circle at 15% 15%, color-mix(in srgb, var(--qp-primary) 11%, var(--qp-bg-surface)), transparent 38%), linear-gradient(135deg,var(--qp-bg-surface),var(--qp-bg-muted)); }
+.qp-yandex-map-fallback-copy > span { width: 38px; height: 38px; display: grid; place-items: center; color: var(--qp-warning); background: var(--qp-warning-soft); border-radius: 12px; }
+.qp-yandex-map-fallback-copy strong { display: block; margin-top: 13px; color: var(--qp-text); font-size: 16px; }
+.qp-yandex-map-fallback-copy p { max-width: 580px; margin: 7px 0 0; color: var(--qp-text-2); font-size: 13px; line-height: 1.55; }
+.qp-yandex-map-points { display: flex; flex-direction: column; gap: 6px; }
+.qp-yandex-map-points button { min-height: 39px; padding: 0 11px; display: flex; align-items: center; gap: 8px; color: var(--qp-text-2); background: color-mix(in srgb,var(--qp-bg-elevated) 82%,transparent); border: 1px solid var(--qp-border-subtle); border-radius: 10px; font-size: 12.5px; text-align: left; }
+.qp-yandex-map-points button:hover { color: var(--qp-primary-dark); background: var(--qp-bg-elevated); border-color: var(--qp-primary-border); }
+.spin { animation: qp-map-spin .8s linear infinite; }
+@keyframes qp-map-spin { to { transform: rotate(360deg); } }
+@media(max-width:760px){.qp-yandex-map-fallback{grid-template-columns:1fr;padding:18px}.qp-yandex-map-points{display:none}}

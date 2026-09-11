@@ -1,0 +1,86 @@
+@use "../../../styles/tokens" as t;
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+
+  width: 100%;
+
+  margin-bottom: 24px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  min-width: 0;
+}
+
+.eyebrow {
+  color: t.$color-primary-dark;
+
+  font-size: 11px;
+  font-weight: t.$font-weight-semibold;
+
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.titleGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  h1 {
+    color: t.$color-text-primary;
+
+    font-size: 28px;
+    font-weight: t.$font-weight-bold;
+    line-height: 1.2;
+
+    letter-spacing: -0.035em;
+  }
+
+  p {
+    max-width: 720px;
+
+    color: t.$color-text-secondary;
+
+    font-size: 13px;
+    line-height: 1.55;
+  }
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+
+  flex: 0 0 auto;
+}
+
+@media (max-width: 767px) {
+  .pageHeader {
+    flex-direction: column;
+    gap: 16px;
+
+    margin-bottom: 20px;
+  }
+
+  .titleGroup {
+    h1 {
+      font-size: 24px;
+    }
+  }
+
+  .actions {
+    width: 100%;
+    justify-content: flex-start;
+
+    flex-wrap: wrap;
+  }
+}

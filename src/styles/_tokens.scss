@@ -1,0 +1,200 @@
+// ========================================
+// QULAY — DESIGN TOKENS
+// ========================================
+
+// Brand colors
+$color-primary: var(--qp-primary, #0a2a43);
+$color-primary-hover: var(--qp-primary-hover, #123e5d);
+$color-primary-active: var(--qp-primary-dark, #082338);
+$color-primary-dark: var(--qp-primary-dark, #071f31);
+
+$color-primary-soft: var(--qp-primary-soft, #eef3f6);
+$color-primary-soft-hover: color-mix(in srgb, var(--qp-primary, #0a2a43) 14%, var(--qp-surface, #ffffff));
+
+// Neutral colors
+$color-white: #ffffff;
+
+$color-gray-25: #fcfcfc;
+$color-gray-50: #f9fafb;
+$color-gray-100: #f4f5f6;
+$color-gray-150: #eef0f1;
+$color-gray-200: #e5e7eb;
+$color-gray-300: #d1d5db;
+$color-gray-400: #9ca3af;
+$color-gray-500: #6b7280;
+$color-gray-600: #4b5563;
+$color-gray-700: #374151;
+$color-gray-800: #1f2937;
+$color-gray-900: #111827;
+$color-black: #0b0d0f;
+
+// Text
+$color-text-primary: var(--qp-text, #1c1c1c);
+$color-text-secondary: var(--qp-text-2, #5c5c5c);
+$color-text-muted: var(--qp-muted, #8a867f);
+$color-text-disabled: #b6bbc1;
+$color-text-inverse: #ffffff;
+
+// Backgrounds
+$color-bg-page: var(--qp-bg, #faf9f6);
+$color-bg-surface: var(--qp-surface, #ffffff);
+$color-bg-subtle: var(--qp-surface-2, #f6f4ef);
+$color-bg-muted: var(--qp-surface-2, #f1efe9);
+$color-bg-green-soft: var(--qp-primary-soft, #eef3f6);
+
+// Borders
+$color-border: var(--qp-border, #e5e2db);
+$color-border-soft: var(--qp-border-soft, #eeeae3);
+$color-border-strong: color-mix(in srgb, var(--qp-border, #d8d3c9) 76%, var(--qp-text, #1c1c1c));
+
+$color-border-focus: var(--qp-primary-border, rgba(10, 42, 67, 0.45));
+
+// States
+$color-success: var(--qp-success, #178448);
+$color-success-soft: var(--qp-success-soft, #e9f8ee);
+
+$color-warning: #f59e0b;
+$color-warning-soft: #fff7e6;
+
+$color-danger: #ef4444;
+$color-danger-soft: #fff0f0;
+
+$color-info: #3b82f6;
+$color-info-soft: #edf5ff;
+
+// ========================================
+// TYPOGRAPHY
+// ========================================
+
+$font-family-base:
+  "Inter",
+  -apple-system,
+  BlinkMacSystemFont,
+  "Segoe UI",
+  sans-serif;
+
+$font-size-2xs: 11px;
+$font-size-xs: 12px;
+$font-size-sm: 13px;
+$font-size-md: 14px;
+$font-size-base: 15px;
+$font-size-lg: 16px;
+$font-size-xl: 18px;
+$font-size-2xl: 20px;
+$font-size-3xl: 24px;
+$font-size-4xl: 28px;
+$font-size-5xl: 32px;
+
+$font-weight-regular: 400;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$font-weight-bold: 700;
+$font-weight-extrabold: 800;
+
+$line-height-tight: 1.2;
+$line-height-snug: 1.35;
+$line-height-normal: 1.5;
+$line-height-relaxed: 1.65;
+
+// ========================================
+// SPACING
+// ========================================
+
+$space-0: 0;
+$space-1: 4px;
+$space-2: 8px;
+$space-3: 12px;
+$space-4: 16px;
+$space-5: 20px;
+$space-6: 24px;
+$space-7: 28px;
+$space-8: 32px;
+$space-9: 36px;
+$space-10: 40px;
+$space-12: 48px;
+$space-14: 56px;
+$space-16: 64px;
+
+// ========================================
+// BORDER RADIUS
+// ========================================
+
+$radius-xs: 6px;
+$radius-sm: 8px;
+$radius-md: 10px;
+$radius-lg: 12px;
+$radius-xl: 14px;
+$radius-2xl: 16px;
+$radius-3xl: 20px;
+$radius-full: 999px;
+
+// ========================================
+// SHADOWS
+// ========================================
+
+$shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.03);
+
+$shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.04);
+
+$shadow-md: 0 6px 18px rgba(15, 23, 42, 0.055);
+
+$shadow-lg: 0 12px 30px rgba(15, 23, 42, 0.07);
+
+$shadow-floating: 0 12px 40px rgba(15, 23, 42, 0.1);
+
+// ========================================
+// TRANSITIONS
+// ========================================
+
+$transition-fast: 120ms ease;
+$transition-base: 180ms ease;
+$transition-slow: 260ms ease;
+
+$transition-color:
+  color $transition-base,
+  background-color $transition-base,
+  border-color $transition-base;
+
+$transition-ui:
+  transform $transition-base,
+  box-shadow $transition-base,
+  background-color $transition-base,
+  border-color $transition-base;
+
+// ========================================
+// LAYOUT
+// ========================================
+
+$sidebar-width: var(--qp-sidebar-width, 236px);
+$sidebar-collapsed-width: var(--qp-sidebar-collapsed-width, 76px);
+
+$topbar-height: var(--qp-topbar-height, 68px);
+
+$content-max-width: 1600px;
+
+$page-padding-desktop: 24px;
+$page-padding-tablet: 20px;
+$page-padding-mobile: 16px;
+
+// ========================================
+// Z-INDEX
+// ========================================
+
+$z-base: 1;
+$z-sticky: 20;
+$z-sidebar: 30;
+$z-topbar: 40;
+$z-dropdown: 100;
+$z-overlay: 200;
+$z-modal: 300;
+$z-toast: 400;
+
+// ========================================
+// BREAKPOINTS
+// ========================================
+
+$breakpoint-sm: 576px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+$breakpoint-xl: 1280px;
+$breakpoint-2xl: 1536px;

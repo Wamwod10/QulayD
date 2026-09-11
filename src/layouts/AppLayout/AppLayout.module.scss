@@ -1,0 +1,46 @@
+.appLayout {
+  width: 100%;
+  min-height: 100vh;
+  background: var(--qp-bg);
+}
+
+.workspace {
+  min-height: 100vh;
+  margin-left: var(--qp-sidebar-width, 236px);
+  transition: margin-left 240ms ease;
+}
+
+.sidebarCollapsed {
+  .workspace {
+    margin-left: var(--qp-sidebar-collapsed-width, 76px);
+  }
+}
+
+.main {
+  width: 100%;
+  min-height: calc(100vh - var(--qp-topbar-height, 68px));
+  background: var(--qp-bg);
+}
+
+@media (max-width: 1023px) {
+  .workspace,
+  .sidebarCollapsed .workspace {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .main {
+    min-height: calc(100vh - 60px);
+  }
+}
+
+.posMode {
+  .workspace {
+    margin-left: 0;
+  }
+  .main {
+    min-height: 100vh;
+    background: var(--qp-bg-app, var(--qp-bg));
+  }
+}

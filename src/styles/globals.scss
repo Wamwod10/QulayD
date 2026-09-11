@@ -1,0 +1,196 @@
+@use "./reset";
+@use "./tokens" as t;
+@use "./glass";
+@use "./prototype";
+
+// ========================================
+// QULAY — GLOBAL STYLES
+// ========================================
+
+:root {
+  font-family: t.$font-family-base;
+  font-synthesis: none;
+
+  color: var(--qp-text, #{t.$color-text-primary});
+  background: var(--qp-bg, #{t.$color-white});
+
+  text-rendering: optimizeLegibility;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --qulay-primary: #{t.$color-primary};
+  --qulay-primary-hover: #{t.$color-primary-hover};
+  --qulay-primary-soft: #{t.$color-primary-soft};
+
+  --qulay-text-primary: #{t.$color-text-primary};
+  --qulay-text-secondary: #{t.$color-text-secondary};
+  --qulay-text-muted: #{t.$color-text-muted};
+
+  --qulay-border: #{t.$color-border};
+  --qulay-border-soft: #{t.$color-border-soft};
+
+  --qulay-background: #{t.$color-white};
+  --qulay-surface: #{t.$color-bg-surface};
+
+  --qulay-success: #{t.$color-success};
+  --qulay-warning: #{t.$color-warning};
+  --qulay-danger: #{t.$color-danger};
+}
+
+html {
+  background: var(--qp-bg, #{t.$color-white});
+}
+
+body {
+  overflow-x: hidden;
+
+  font-family: t.$font-family-base;
+  font-size: t.$font-size-md;
+  font-weight: t.$font-weight-regular;
+  line-height: t.$line-height-normal;
+
+  color: var(--qp-text, #{t.$color-text-primary});
+  background: var(--qp-bg, #{t.$color-white});
+}
+
+#root {
+  isolation: isolate;
+}
+
+::selection {
+  color: t.$color-white;
+  background: t.$color-primary;
+}
+
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: t.$color-text-muted;
+}
+
+button:disabled,
+input:disabled,
+textarea:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
+a,
+button {
+  transition:
+    color t.$transition-fast,
+    background-color t.$transition-fast,
+    border-color t.$transition-fast,
+    opacity t.$transition-fast;
+}
+
+:focus-visible {
+  outline: 2px solid var(--qp-primary-border, rgba(34, 180, 85, 0.45));
+  outline-offset: 2px;
+}
+
+.app-root {
+  width: 100%;
+  min-height: 100vh;
+
+  background: var(--qp-bg, #{t.$color-white});
+}
+
+/* Runtime theme layer */
+html,body,#root{background:var(--qp-bg);color:var(--qp-text)}
+:focus-visible{outline-color:var(--qp-primary);box-shadow:0 0 0 3px var(--qp-focus-ring)}
+[data-theme="dark"] .qp-card,[data-theme="dark"] .qp-metric,[data-theme="dark"] .qp-section-nav,[data-theme="dark"] .qp-table,[data-theme="dark"] .qp-modal,[data-theme="dark"] .qp-drawer,[data-theme="dark"] .qp-auth-card{background:var(--qp-surface);color:var(--qp-text)}
+[data-theme="dark"] .qp-input,[data-theme="dark"] .qp-textarea,[data-theme="dark"] .qp-custom-select-trigger,[data-theme="dark"] input,[data-theme="dark"] textarea{background:var(--qp-surface-2);color:var(--qp-text);border-color:var(--qp-border)}
+[data-theme="dark"] .qp-table th,[data-theme="dark"] .qp-table tbody tr:hover,[data-theme="dark"] .qp-toolbar-surface{background:var(--qp-surface-2)}
+[data-theme="dark"] .qp-button-secondary,[data-theme="dark"] .qp-button-ghost:hover{background:var(--qp-surface-2);color:var(--qp-text);border-color:var(--qp-border)}
+
+.qp-access-state {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 32px;
+  text-align: center;
+  color: var(--qp-text, #18201b);
+  background: var(--qp-page-bg, #f6f8f7);
+}
+
+.qp-access-state-icon {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  color: var(--qp-danger, #d92d20);
+  background: color-mix(in srgb, var(--qp-danger, #d92d20) 10%, transparent);
+}
+
+.qp-access-state h1 { margin: 0; font-size: 26px; }
+.qp-access-state p { margin: 0; max-width: 520px; color: var(--qp-text-muted, #69736c); }
+.qp-access-state a { margin-top: 8px; color: var(--qp-primary, #0a2a43); font-weight: 700; }
+
+/* Qulay semantic theme surface — v5.2 */
+html, body, #root, .app-root { background: var(--qp-bg-app, var(--qp-bg)); color: var(--qp-text-primary, var(--qp-text)); }
+body { transition: background-color 180ms ease, color 180ms ease; }
+::selection { color: var(--qp-on-brand, #fff); background: var(--qp-brand-primary, var(--qp-primary)); }
+input::placeholder, textarea::placeholder { color: var(--qp-text-muted, var(--qp-muted)); }
+
+[data-theme="dark"] {
+  scrollbar-color: var(--qp-border-strong) var(--qp-bg-app);
+}
+[data-theme="dark"] .qp-card,
+[data-theme="dark"] .qp-metric,
+[data-theme="dark"] .qp-modal,
+[data-theme="dark"] .qp-drawer,
+[data-theme="dark"] .qp-table-card,
+[data-theme="dark"] .qp-role-card,
+[data-theme="dark"] .qp-pos-products-panel,
+[data-theme="dark"] .qp-pos-checkout-panel,
+[data-theme="dark"] .qp-auth-card,
+[data-theme="dark"] .qp-section-tabs {
+  background: var(--qp-bg-surface);
+  color: var(--qp-text-primary);
+  border-color: var(--qp-border-soft);
+}
+[data-theme="dark"] .qp-card-head,
+[data-theme="dark"] .qp-table th,
+[data-theme="dark"] .qp-table tbody tr:hover,
+[data-theme="dark"] .qp-table-summary-item,
+[data-theme="dark"] .qp-dashboard-fact,
+[data-theme="dark"] .qp-detail-kpis > div,
+[data-theme="dark"] .qp-detail-kpi,
+[data-theme="dark"] .qp-product-tile,
+[data-theme="dark"] .qp-cart-line,
+[data-theme="dark"] .qp-choice-card,
+[data-theme="dark"] .qp-auth-benefits > div {
+  background: var(--qp-bg-muted) !important;
+  color: var(--qp-text-primary);
+  border-color: var(--qp-border-soft) !important;
+}
+[data-theme="dark"] .qp-input,
+[data-theme="dark"] .qp-textarea,
+[data-theme="dark"] .qp-custom-select-trigger,
+[data-theme="dark"] .qp-search {
+  background: var(--qp-bg-muted) !important;
+  color: var(--qp-text-primary) !important;
+  border-color: var(--qp-border) !important;
+}
+[data-theme="dark"] .qp-button-secondary,
+[data-theme="dark"] .qp-button-ghost:hover,
+[data-theme="dark"] .qp-icon-button:hover {
+  background: var(--qp-bg-muted) !important;
+  color: var(--qp-text-primary) !important;
+  border-color: var(--qp-border) !important;
+}
+[data-theme="dark"] .qp-ai-card,
+[data-theme="dark"] .qp-dashboard-attention-row:hover {
+  background: color-mix(in srgb, var(--qp-bg-surface) 88%, var(--qp-brand-soft)) !important;
+}

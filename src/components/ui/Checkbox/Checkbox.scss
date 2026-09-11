@@ -1,0 +1,19 @@
+.qp-checkbox {
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--qp-on-brand);
+  background: var(--qp-bg-surface);
+  border: 1.5px solid var(--qp-border-strong);
+  border-radius: 6px;
+  box-shadow: none;
+  transition: background 130ms ease, border-color 130ms ease, box-shadow 130ms ease, transform 100ms ease;
+}
+.qp-checkbox:hover { border-color: color-mix(in srgb, var(--qp-primary) 48%, var(--qp-border-strong)); background: var(--qp-primary-soft); }
+.qp-checkbox:focus-visible { outline: 0; box-shadow: 0 0 0 3px color-mix(in srgb, var(--qp-primary) 13%, transparent); }
+.qp-checkbox.is-checked { background: var(--qp-primary); border-color: var(--qp-primary); box-shadow: 0 3px 8px color-mix(in srgb, var(--qp-primary) 20%, transparent); }
+.qp-checkbox:active { transform: scale(.93); }
+.qp-checkbox:disabled { opacity: .5; cursor: not-allowed; }

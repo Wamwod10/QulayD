@@ -1,0 +1,21 @@
+@use "../../../styles/tokens" as t;
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 25px;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-radius: t.$radius-full;
+  font-size: 11px;
+  font-weight: t.$font-weight-semibold;
+  line-height: 1;
+  white-space: nowrap;
+}
+.dot { width: 6px; height: 6px; background: currentColor; border-radius: 50%; }
+.neutral { color: var(--qp-text-secondary); background: var(--qp-bg-muted); border-color: var(--qp-border-subtle); }
+.success { color: var(--qp-success); background: var(--qp-success-soft); border-color: color-mix(in srgb, var(--qp-success) 14%, transparent); }
+.warning { color: var(--qp-warning); background: var(--qp-warning-soft); border-color: color-mix(in srgb, var(--qp-warning) 14%, transparent); }
+.danger { color: var(--qp-danger); background: var(--qp-danger-soft); border-color: color-mix(in srgb, var(--qp-danger) 14%, transparent); }
+.info { color: var(--qp-info); background: var(--qp-info-soft); border-color: color-mix(in srgb, var(--qp-info) 14%, transparent); }

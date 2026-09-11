@@ -1,0 +1,78 @@
+@use "../../../styles/tokens" as t;
+@use "../../../styles/mixins" as m;
+
+.wrapper {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+
+  width: 100%;
+  max-width: 320px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 12px;
+
+  color: var(--qp-muted);
+
+  pointer-events: none;
+}
+
+.wrapper input {
+  width: 100%;
+  height: 40px;
+
+  padding: 0 38px 0 39px;
+
+  color: var(--qp-text);
+  background: var(--qp-surface);
+
+  border: 1px solid var(--qp-border);
+  border-radius: 10px;
+
+  outline: none;
+
+  font-size: 13px;
+
+  transition:
+    border-color t.$transition-base,
+    box-shadow t.$transition-base,
+    background-color t.$transition-base;
+
+  &::placeholder {
+    color: var(--qp-muted);
+  }
+
+  &:hover {
+    border-color: var(--qp-border-strong);
+  }
+
+  &:focus {
+    @include m.focus-ring;
+  }
+
+  &::-webkit-search-cancel-button {
+    display: none;
+  }
+}
+
+.clearButton {
+  @include m.flex-center;
+
+  position: absolute;
+  right: 8px;
+
+  width: 26px;
+  height: 26px;
+
+  color: var(--qp-muted);
+
+  border-radius: 7px;
+
+  &:hover {
+    color: var(--qp-text);
+    background: var(--qp-surface-2);
+  }
+}

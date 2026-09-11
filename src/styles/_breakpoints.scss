@@ -1,0 +1,47 @@
+@use "./tokens" as t;
+
+// ========================================
+// QULAY — RESPONSIVE BREAKPOINT MIXINS
+// ========================================
+
+@mixin mobile {
+  @media (max-width: #{t.$breakpoint-md - 1px}) {
+    @content;
+  }
+}
+
+@mixin tablet {
+  @media (min-width: t.$breakpoint-md) and (max-width: #{t.$breakpoint-lg - 1px}) {
+    @content;
+  }
+}
+
+@mixin tablet-down {
+  @media (max-width: #{t.$breakpoint-lg - 1px}) {
+    @content;
+  }
+}
+
+@mixin tablet-up {
+  @media (min-width: t.$breakpoint-md) {
+    @content;
+  }
+}
+
+@mixin desktop {
+  @media (min-width: t.$breakpoint-lg) {
+    @content;
+  }
+}
+
+@mixin desktop-large {
+  @media (min-width: t.$breakpoint-xl) {
+    @content;
+  }
+}
+
+@mixin desktop-extra-large {
+  @media (min-width: t.$breakpoint-2xl) {
+    @content;
+  }
+}

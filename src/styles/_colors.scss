@@ -1,0 +1,21 @@
+:root {
+  --color-primary: var(--qp-primary, #0a2a43);
+  --color-primary-dark: var(--qp-primary-dark, #071f31);
+  --color-primary-soft: var(--qp-primary-soft, #eef3f6);
+
+  --color-bg: var(--qp-bg, #faf9f6);
+  --color-surface: var(--qp-surface, #ffffff);
+  --color-surface-soft: var(--qp-surface-2, #f6f4ef);
+
+  --color-text: var(--qp-text, #1c1c1c);
+  --color-text-secondary: var(--qp-text-2, #5c5c5c);
+  --color-text-muted: var(--qp-muted, #8a867f);
+  --color-text-soft: #9b978f;
+
+  --color-border: var(--qp-border, #e5e2db);
+  --color-border-soft: var(--qp-border-soft, #eeeae3);
+
+  --color-warning: #f5a524;
+  --color-danger: #e5484d;
+  --color-success: var(--qp-success, #178448);
+}

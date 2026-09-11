@@ -1,0 +1,43 @@
+@use "../../../styles/tokens" as t;
+
+.card {
+  width: 100%;
+
+  background: var(--qp-surface);
+
+  border: 1px solid var(--qp-border-soft);
+  border-radius: t.$radius-2xl;
+
+  box-shadow: var(--qp-card-shadow);
+
+  transition:
+    border-color t.$transition-base,
+    box-shadow t.$transition-base,
+    transform t.$transition-base;
+}
+
+.none {
+  padding: 0;
+}
+
+.sm {
+  padding: 14px;
+}
+
+.md {
+  padding: 18px;
+}
+
+.lg {
+  padding: 22px;
+}
+
+.hoverable {
+  &:hover {
+    border-color: var(--qp-border);
+
+    box-shadow: var(--qp-card-shadow);
+
+    transform: translateY(-1px);
+  }
+}

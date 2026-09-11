@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "Qulay Business Control System",
+  "short_name": "Qulay",
+  "description": "Qulay — distribyutsiya biznesini boshqarish platformasi",
+  "lang": "uz",
+  "dir": "ltr",
+  "start_url": "/dashboard?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#0d1117",
+  "theme_color": "#0a2a43",
+  "orientation": "any",
+  "icons": [
+    { "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Buyurtmalar", "short_name": "Buyurtmalar", "url": "/orders" },
+    { "name": "Tezkor kassa", "short_name": "Kassa", "url": "/sales/pos" },
+    { "name": "Mijozlar", "short_name": "Mijozlar", "url": "/customers" }
+  ]
+}

@@ -1,5 +1,6 @@
-import { getCompanyPlanLimits } from "./authService";
+import { createEmployeeAuthUser, getCompanyPlanLimits, revokeUserSessions, updateEmployeeAuthUser } from "./authService";
 import { makeId, updateLocalDb } from "./localDb";
+import { hashDevicePin } from "../utils/deviceSecurity";
 
 const SYSTEM_EMPLOYEE_TYPES = new Set(["SALES_AGENT", "SALES_MANAGER", "DELIVERY_DRIVER", "WAREHOUSE_WORKER", "OTHER"]);
 
@@ -55,13 +56,17 @@ function syncAgentRecord(db, employee) {
   }
 }
 
-export function createEmployeeIdentity(payload) {
+export async function createEmployeeIdentity(payload) {
   const cleanName = String(payload.name || "").trim();
   const cleanTitle = String(payload.title || "").trim();
   const cleanPhone = String(payload.phone || "").trim();
   if (!cleanName) throw new Error("Xodim ismini kiriting.");
   if (!cleanTitle) throw new Error("Lavozimni kiriting.");
   if (!cleanPhone) throw new Error("Telefon raqamini kiriting.");
+  if (!String(payload.login || "").trim()) throw new Error("Loginni kiriting.");
+  if (String(payload.password || "").length < 6) throw new Error("Parol kamida 6 belgidan iborat bo‘lsin.");
+  if (!/^\d{6}$/.test(String(payload.pin || ""))) throw new Error("PIN 6 ta raqamdan iborat bo‘lsin.");
+  if (!Array.isArray(payload.moduleAccess) || !payload.moduleAccess.length) throw new Error("Kamida bitta modulni tanlang.");
 
   let created = null;
   updateLocalDb((db) => {
@@ -99,6 +104,13 @@ export function createEmployeeIdentity(payload) {
     db.users.unshift(created);
     syncAgentRecord(db, created);
   });
+  try {
+    const pinHash = await hashDevicePin(payload.pin);
+    createEmployeeAuthUser({ ...payload, employeeId: created.id, name: cleanName, title: cleanTitle, phone: cleanPhone, pinHash });
+  } catch (error) {
+    updateLocalDb((db) => { db.users = (db.users || []).filter((item) => item.id !== created.id); db.agents = (db.agents || []).filter((item) => item.employeeId !== created.id); });
+    throw error;
+  }
   return created;
 }
 
@@ -116,5 +128,7 @@ export function updateEmployeeRecord(employeeId, patch) {
     updated = employee;
     syncAgentRecord(db, employee);
   });
+  const authUser = updateEmployeeAuthUser(employeeId, { status: updated.status, name: updated.name, title: updated.title, phone: updated.phone });
+  if (updated.status !== "ACTIVE" && authUser) revokeUserSessions(authUser.id);
   return updated;
 }

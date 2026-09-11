@@ -12,8 +12,10 @@ import Select from "../../../components/ui/Select";
 import { adjustProductStock, createProduct } from "../../../services/prototypeActions";
 import { updateLocalDb, useLocalDb } from "../../../services/localDb";
 import { notify } from "../../../services/notify";
+import { PERMISSIONS } from "../../../constants/permissions";
+import { usePermissions } from "../../../hooks/usePermissions";
 import { formatMoney, getName } from "../../../utils/formatters";
-import { collectProductBarcodes, createProductIdentity, generateUniqueEan13, generateUniqueSku, getProductBarcodes } from "../../../utils/productCodes";
+import { collectProductBarcodes, createProductIdentity, generateUniqueSku, getProductBarcodes } from "../../../utils/productCodes";
 
 const blankForm = {
   name: "",
@@ -33,6 +35,7 @@ const blankForm = {
 
 function ProductsPage() {
   const db = useLocalDb();
+  const { can } = usePermissions();
   const [searchParams, setSearchParams] = useSearchParams();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -93,7 +96,7 @@ function ProductsPage() {
       next.delete("create");
       setSearchParams(next, { replace: true });
     }
-    // openCreate intentionally reads the latest catalog/warehouse state when the quick action is used.
+    // openCreate intentionally reads the latest product/warehouse state when the quick action is used.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, setSearchParams]);
 
@@ -106,7 +109,7 @@ function ProductsPage() {
       name: product.name || "",
       image: product.image || "",
       sku: product.sku || "",
-      barcodes: getProductBarcodes(product),
+      barcodes: getProductBarcodes(product).length ? getProductBarcodes(product) : [""],
       categoryId: product.categoryId || "",
       unitId: product.unitId || "",
       costPrice: String(product.costPrice ?? ""),
@@ -132,22 +135,17 @@ function ProductsPage() {
     setForm((current) => ({ ...current, sku: generateUniqueSku(db.products, editing?.id || "") }));
   };
 
-  const generateBarcode = () => {
-    let candidate = generateUniqueEan13(db.products, editing?.id || "");
-    while (form.barcodes.includes(candidate)) candidate = generateUniqueEan13(db.products, editing?.id || "");
-    return candidate;
-  };
-
-  const addBarcode = () => setForm((current) => ({ ...current, barcodes: [...current.barcodes, generateBarcode()] }));
+  const addBarcode = () => setForm((current) => ({ ...current, barcodes: [...current.barcodes, ""] }));
   const updateBarcode = (index, value) => setForm((current) => ({ ...current, barcodes: current.barcodes.map((item, itemIndex) => itemIndex === index ? value : item) }));
-  const regenerateBarcode = (index) => updateBarcode(index, generateBarcode());
   const removeBarcode = (index) => setForm((current) => ({ ...current, barcodes: current.barcodes.filter((_, itemIndex) => itemIndex !== index) }));
 
   const validateIdentity = () => {
     const sku = form.sku.trim();
-    const barcodes = Array.from(new Set(form.barcodes.map((value) => String(value || "").trim()).filter(Boolean)));
+    const enteredBarcodes = form.barcodes.map((value) => String(value || "").trim()).filter(Boolean);
+    const barcodes = Array.from(new Set(enteredBarcodes));
     if (!sku) return { ok: false, message: "SKU kiriting yoki avtomatik yarating" };
-    if (!barcodes.length) return { ok: false, message: "Kamida bitta shtrix-kod bo‘lishi kerak" };
+    if ((!editing || sku !== String(editing.sku || "")) && !/^\d{5}$/.test(sku)) return { ok: false, message: "SKU faqat 5 ta raqamdan iborat bo'lishi kerak" };
+    if (enteredBarcodes.length && enteredBarcodes.length !== barcodes.length) return { ok: false, message: "Bir mahsulotda bir xil shtrix-kod takrorlanmasin" };
     const duplicateSku = db.products.some((product) => product.id !== editing?.id && String(product.sku || "").trim().toLowerCase() === sku.toLowerCase());
     if (duplicateSku) return { ok: false, message: "Bu SKU boshqa mahsulotda mavjud" };
     const existingBarcodes = collectProductBarcodes(db.products, editing?.id || "");
@@ -182,7 +180,7 @@ function ProductsPage() {
             image: form.image || "",
             sku: identity.sku,
             barcodes: identity.barcodes,
-            barcode: identity.barcodes[0],
+            barcode: identity.barcodes[0] || "",
             categoryId: form.categoryId,
             unitId: form.unitId,
             costPrice: Math.max(0, Number(form.costPrice) || 0),
@@ -201,7 +199,7 @@ function ProductsPage() {
         }
         notify("Mahsulot va qoldiq yangilandi");
       } else {
-        createProduct({ ...form, sku: identity.sku, barcodes: identity.barcodes, barcode: identity.barcodes[0] });
+        createProduct({ ...form, sku: identity.sku, barcodes: identity.barcodes, barcode: identity.barcodes[0] || "" });
         notify("Mahsulot yaratildi");
       }
 
@@ -239,17 +237,17 @@ function ProductsPage() {
       <SmartTablePage
         title="Mahsulotlar"
         description="Savdo, tezkor kassa va ombor foydalanadigan yagona katalog. Rasm, narx, SKU, bir nechta shtrix-kod va real qoldiq shu yerda bog‘langan."
-        eyebrow="Katalog"
+        eyebrow="Ombor"
         rows={rows}
         searchFields={["name", "sku", "barcodeSearch", "category"]}
         extraSummary={[
           { label: "Faol mahsulot", value: activeCount, hint: "Savdoda foydalanish mumkin" },
           { label: "Kam qoldiq", value: lowStockCount, hint: "Minimal qoldiqqa yetgan" },
           { label: "Qoldiq tugagan", value: outOfStock, hint: "Sotish uchun mavjud emas" },
-          { label: "Kategoriyalar", value: db.categories.length, hint: "Katalog guruhlari" },
+          { label: "Kategoriyalar", value: db.categories.length, hint: "Mahsulot guruhlari" },
         ]}
-        bulkActions={archiveSelected}
-        actions={<PrimaryButton onClick={openCreate}><Plus size={15} /> Yangi mahsulot</PrimaryButton>}
+        bulkActions={can(PERMISSIONS.PRODUCTS_MANAGE) ? archiveSelected : undefined}
+        actions={can(PERMISSIONS.PRODUCTS_MANAGE) ? <PrimaryButton onClick={openCreate}><Plus size={15} /> Yangi mahsulot</PrimaryButton> : null}
         detailTitle={(row) => row.name}
         detailDescription={(row) => `SKU ${row.sku} · ${row.category}`}
         detailRenderer={(row) => (
@@ -258,9 +256,9 @@ function ProductsPage() {
             <div className="qp-detail-kpis">
               <div><span>Sotish mumkin</span><strong>{row.availableStock} {row.unit}</strong></div>
               <div><span>Tannarx</span><strong>{formatMoney(row.costPrice || 0)}</strong></div>
-              <div><span>Chakana</span><strong>{formatMoney(row.price)}</strong></div>
+              <div><span>Sotuv narxi</span><strong>{formatMoney(row.price)}</strong></div>
               <div><span>Band qilingan</span><strong>{row.reserved} {row.unit}</strong></div>
-              <div><span>Chakana foyda</span><strong>{formatMoney(Math.max(0, Number(row.price || 0) - Number(row.costPrice || 0)))}</strong></div>
+              <div><span>Sotuv foydasi</span><strong>{formatMoney(Math.max(0, Number(row.price || 0) - Number(row.costPrice || 0)))}</strong></div>
               <div><span>Marja</span><strong>{Number(row.price || 0) > 0 ? `${(((Number(row.price || 0) - Number(row.costPrice || 0)) / Number(row.price || 0)) * 100).toFixed(1)}%` : "0%"}</strong></div>
             </div>
             <div className="qp-drawer-detail-row"><span>Shtrix-kodlar</span><strong>{row.barcodes.join(" · ")}</strong></div>
@@ -268,7 +266,7 @@ function ProductsPage() {
             <div className="qp-drawer-detail-row"><span>Holat</span><StatusPill status={row.status} /></div>
             <div className="qp-form-actions">
               <SecondaryButton type="button" onClick={() => setCodeProduct(row)}><Barcode size={15} /> Shtrix / QR</SecondaryButton>
-              <PrimaryButton type="button" onClick={() => openEdit(row)}><Edit3 size={15} /> Tahrirlash</PrimaryButton>
+              {can(PERMISSIONS.PRODUCTS_MANAGE) ? <PrimaryButton type="button" onClick={() => openEdit(row)}><Edit3 size={15} /> Tahrirlash</PrimaryButton> : null}
             </div>
           </div>
         )}
@@ -276,38 +274,38 @@ function ProductsPage() {
           { key: "name", label: "Mahsulot", render: (row) => <div className="qp-product-name-cell">{row.image ? <img src={row.image} alt="" /> : <span>{row.name.slice(0, 1).toUpperCase()}</span>}<div><strong>{row.name}</strong><div className="qp-muted">SKU {row.sku}</div></div></div> },
           { key: "category", label: "Kategoriya" },
           { key: "unit", label: "Birlik" },
-          { key: "barcode", label: "Shtrix-kod", render: (row) => <button type="button" className="qp-code-link" onClick={() => setCodeProduct(row)}><Barcode size={14} /> {row.barcode}{row.barcodes.length > 1 ? ` +${row.barcodes.length - 1}` : ""}</button> },
+          { key: "barcode", label: "Shtrix-kod", render: (row) => row.barcode ? <button type="button" className="qp-code-link" onClick={() => setCodeProduct(row)}><Barcode size={14} /> {row.barcode}{row.barcodes.length > 1 ? ` +${row.barcodes.length - 1}` : ""}</button> : <span className="qp-muted">—</span> },
           { key: "availableStock", label: "Sotish mumkin", render: (row) => <div className={`qp-stock-cell ${row.availableStock <= 0 ? "danger" : row.availableStock <= Number(row.minStock || 0) ? "warning" : ""}`}><strong>{row.availableStock}</strong><span>{row.unit}</span></div> },
           { key: "costPrice", label: "Tannarx", render: (row) => formatMoney(row.costPrice || 0) },
-          { key: "price", label: "Chakana", render: (row) => <strong>{formatMoney(row.price)}</strong> },
-          { key: "wholesalePrice", label: "Ulgurji", render: (row) => formatMoney(row.wholesalePrice) },
+          { key: "price", label: "Sotuv narxi", render: (row) => <strong>{formatMoney(row.price)}</strong> },
+          { key: "wholesalePrice", label: "Tannarx", render: (row) => formatMoney(row.wholesalePrice) },
           { key: "status", label: "Holat", render: (row) => <StatusPill status={row.status} /> },
-          { key: "actions", label: "Amal", sortable: false, render: (row) => <RowActions items={[
+          ...(can(PERMISSIONS.PRODUCTS_MANAGE) ? [{ key: "actions", label: "Amal", sortable: false, render: (row) => <RowActions items={[
             { label: "Tahrirlash", icon: Edit3, onClick: () => openEdit(row) },
             { label: "Shtrix / QR", icon: Barcode, onClick: () => setCodeProduct(row) },
             { label: row.status === "ACTIVE" ? "Faolsizlantirish" : "Faollashtirish", icon: Power, onClick: () => toggleStatus(row) },
-          ]} /> },
+          ]} /> }] : []),
         ]}
       />
 
-      <Modal open={open} title={editing ? "Mahsulotni tahrirlash" : "Yangi mahsulot"} description="SKU va birinchi shtrix-kod avtomatik yaratiladi. Foydalanuvchi ularni tahrirlashi va qo‘shimcha shtrix-kodlar qo‘shishi mumkin." onClose={() => setOpen(false)} wide>
+      <Modal open={open} title={editing ? "Mahsulotni tahrirlash" : "Yangi mahsulot"} description="5 xonali SKU avtomatik yaratiladi. Shtrix-kodlarni foydalanuvchi o‘zi kiritadi." onClose={() => setOpen(false)} wide>
         <form onSubmit={submit}>
           <div className="qp-form-grid">
             <div className="qp-form-span-full"><ImageUploader value={form.image} name={form.name} label="Mahsulot rasmini yuklash" onChange={(image) => setForm((current) => ({ ...current, image }))} /></div>
             <Field label="Mahsulot nomi"><input className="qp-input" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Field>
             <Field label="Kategoriya"><Select value={form.categoryId} onChange={(event) => setForm({ ...form, categoryId: event.target.value })}><option value="">Tanlang</option>{db.categories.filter((item) => item.status !== "INACTIVE").map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></Field>
-            <Field label="SKU" hint="Avtomatik yaratiladi, lekin xohlasangiz o‘zgartiring"><div className="qp-code-edit-row"><input className="qp-input" value={form.sku} onChange={(event) => setForm({ ...form, sku: event.target.value })} /><button type="button" className="qp-icon-button" title="Yangi SKU yaratish" onClick={regenerateSku}><RefreshCw size={15} /></button></div></Field>
+            <Field label="SKU" hint="5 ta raqam; avtomatik yaratiladi, lekin tahrirlash mumkin"><div className="qp-code-edit-row"><input className="qp-input" inputMode="numeric" maxLength={5} value={form.sku} onChange={(event) => setForm({ ...form, sku: event.target.value.replace(/\D/g, "").slice(0, 5) })} /><button type="button" className="qp-icon-button" title="Yangi SKU yaratish" onClick={regenerateSku}><RefreshCw size={15} /></button></div></Field>
             <Field label="O‘lchov birligi"><Select value={form.unitId} onChange={(event) => setForm({ ...form, unitId: event.target.value })}><option value="">Tanlang</option>{db.units.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></Field>
             <div className="qp-form-span-full qp-barcode-editor">
               <div className="qp-barcode-editor-head"><div><strong>Shtrix-kodlar</strong><span>Birinchi kod asosiy hisoblanadi. Har bir kod POS va qidiruvda ishlaydi.</span></div><SecondaryButton type="button" onClick={addBarcode}><Plus size={14} /> Shtrix-kod qo‘shish</SecondaryButton></div>
               <div className="qp-barcode-list">
-                {form.barcodes.map((barcode, index) => <div className="qp-barcode-row" key={`barcode-${index}`}><span>{index === 0 ? "Asosiy" : `${index + 1}-kod`}</span><input className="qp-input" value={barcode} onChange={(event) => updateBarcode(index, event.target.value)} /><button type="button" className="qp-icon-button" title="Random kod yaratish" onClick={() => regenerateBarcode(index)}><RefreshCw size={15} /></button><button type="button" className="qp-icon-button" title="Olib tashlash" disabled={form.barcodes.length === 1} onClick={() => removeBarcode(index)}><Trash2 size={15} /></button></div>)}
+                {form.barcodes.map((barcode, index) => <div className="qp-barcode-row" key={`barcode-${index}`}><span>{index === 0 ? "Asosiy" : `${index + 1}-kod`}</span><input className="qp-input" value={barcode} onChange={(event) => updateBarcode(index, event.target.value)} placeholder="Shtrix-kodni kiriting" /><button type="button" className="qp-icon-button" title="Olib tashlash" disabled={form.barcodes.length === 1} onClick={() => removeBarcode(index)}><Trash2 size={15} /></button></div>)}
               </div>
             </div>
             <Field label="Minimal qoldiq"><input className="qp-input" type="number" min="0" value={form.minStock} onChange={(event) => setForm({ ...form, minStock: event.target.value })} /></Field>
             <Field label="Tannarx"><input className="qp-input" type="number" min="0" value={form.costPrice} onChange={(event) => setForm({ ...form, costPrice: event.target.value })} placeholder="Mahsulotning boshlang‘ich tannarxi" /></Field>
-            <Field label="Chakana narx"><input className="qp-input" type="number" min="0" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></Field>
-            <Field label="Ulgurji narx"><input className="qp-input" type="number" min="0" value={form.wholesalePrice} onChange={(event) => setForm({ ...form, wholesalePrice: event.target.value })} /></Field>
+            <Field label="Sotuv narxi"><input className="qp-input" type="number" min="0" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></Field>
+            <Field label="Tannarx"><input className="qp-input" type="number" min="0" value={form.wholesalePrice} onChange={(event) => setForm({ ...form, wholesalePrice: event.target.value })} /></Field>
 
             {!editing ? (
               <>

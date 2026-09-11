@@ -250,7 +250,7 @@ function VisitsPage() {
           {finishForm.result === "PAYMENT_COLLECTED" ? (
             <div className="qp-form-grid">
               <Field label="To‘lov summasi"><input className="qp-input" type="number" min="1" value={finishForm.amount} onChange={(event) => setFinishForm({ ...finishForm, amount: event.target.value })} /></Field>
-              <Field label="To‘lov usuli"><Select value={finishForm.method} onChange={(event) => setFinishForm({ ...finishForm, method: event.target.value })}><option value="CASH">Naqd</option><option value="CARD">Karta</option><option value="BANK">Bank o‘tkazmasi</option></Select></Field>
+              <Field label="To‘lov usuli"><Select value={finishForm.method} onChange={(event) => setFinishForm({ ...finishForm, method: event.target.value })}>{(db.paymentMethods || []).filter((item)=>item.status === "ACTIVE").map((item)=><option key={item.id} value={item.code}>{item.name}</option>)}</Select></Field>
               <div className="qp-muted">Mijoz qarzi: {formatMoney(db.customers.find((item) => item.id === db.visits.find((visit) => visit.id === finishVisitId)?.customerId)?.debt || 0)}</div>
             </div>
           ) : null}

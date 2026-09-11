@@ -54,8 +54,8 @@ const labels = {
   OVER_LIMIT: "Limitdan oshgan",
   OPEN: "Qarzdor",
   CLEAR: "Qarzi yo‘q",
-  RETAIL: "Chakana",
-  WHOLESALE: "Ulgurji",
+  RETAIL: "Sotuv narxi",
+  WHOLESALE: "Tannarx",
   VIP: "VIP",
   PROMO: "Aksiya",
   CUSTOM: "Maxsus",
@@ -105,7 +105,9 @@ export function getStatusTone(status) {
   return "neutral";
 }
 
-export function getPaymentMethodLabel(value) {
+export function getPaymentMethodLabel(value, methods = []) {
+  const custom = methods.find((item) => item.code === value);
+  if (custom) return custom.name;
   return getLabel(value, "Noma’lum");
 }
 

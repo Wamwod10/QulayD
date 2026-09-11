@@ -19,6 +19,20 @@ function AppLayout() {
   const isPosMode = location.pathname === "/sales/pos";
 
   useEffect(() => {
+    if (!isMobileMenuOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const onKeyDown = (event) => { if (event.key === "Escape") setIsMobileMenuOpen(false); };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isMobileMenuOpen]);
+
+  useEffect(() => { setIsMobileMenuOpen(false); }, [location.pathname]);
+
+  useEffect(() => {
     const section = findNavigationSection(location.pathname);
     if (!section) return;
     if (["dashboard", "settings"].includes(section.key)) return;

@@ -18,7 +18,7 @@ function OrderCreatePage() {
   const [customerId, setCustomerId] = useState("");
   const [agentId, setAgentId] = useState("");
   const [warehouseId, setWarehouseId] = useState(db.settings.company.defaultWarehouseId || db.warehouses[0]?.id || "");
-  const [items, setItems] = useState([{ productId: "", quantity: 1 }]);
+  const [items, setItems] = useState([{ productId: "", quantity: "1" }]);
   const [discountPercent, setDiscountPercent] = useState(0);
   const operationalAgents = useMemo(() => getOperationalAgents(db), [db]);
 
@@ -42,13 +42,17 @@ function OrderCreatePage() {
       notify("Mijoz, ombor va kamida bitta mahsulotni tanlang", "warning");
       return;
     }
+    if (normalized.some((item) => item.productId && (!item.quantity || Number(item.quantity) <= 0))) {
+      notify("Har bir mahsulot uchun miqdor 0 dan katta bo‘lsin", "warning");
+      return;
+    }
     const result = createOrder({ customerId, agentId, warehouseId, items: normalized, discountPercent });
     notify(result.message, result.ok ? "success" : "danger");
     if (result.ok) navigate("/orders");
   };
 
   const removeRow = (index) => {
-    setItems((current) => current.length === 1 ? [{ productId: "", quantity: 1 }] : current.filter((_, itemIndex) => itemIndex !== index));
+    setItems((current) => current.length === 1 ? [{ productId: "", quantity: "1" }] : current.filter((_, itemIndex) => itemIndex !== index));
   };
 
   return (
@@ -64,7 +68,7 @@ function OrderCreatePage() {
           {db.settings.sales.warnCustomerDebt !== false && selectedCustomer && getCustomerDebt(db, selectedCustomer.id) > 0 ? <div className="qp-inline-warning">Mijozning joriy qarzi: <strong>{formatMoney(getCustomerDebt(db, selectedCustomer.id))}</strong></div> : null}
         </SectionCard>
 
-        <SectionCard title="Mahsulotlar" description={db.settings.sales.showStockOnOrder !== false ? "Har bir qator yonida tanlangan ombordagi sotish mumkin bo‘lgan qoldiq ko‘rsatiladi." : "Mahsulot, miqdor va narxni kiriting."} actions={<SecondaryButton type="button" onClick={() => setItems((current) => [...current, { productId: "", quantity: 1 }])}><Plus size={14} /> Qator qo‘shish</SecondaryButton>}>
+        <SectionCard title="Mahsulotlar" description={db.settings.sales.showStockOnOrder !== false ? "Har bir qator yonida tanlangan ombordagi sotish mumkin bo‘lgan qoldiq ko‘rsatiladi." : "Mahsulot, miqdor va narxni kiriting."}>
           <div className="qp-order-lines">
             {normalized.map((line, index) => (
               <div className={`qp-order-line ${line.productId && line.quantity > line.available && !db.settings.inventory.allowNegativeStock ? "has-error" : ""}`} key={`${index}-${line.productId}`}>
@@ -74,7 +78,7 @@ function OrderCreatePage() {
                     {db.products.filter((product) => product.status === "ACTIVE").map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
                   </Select>
                 </Field>
-                <Field label="Miqdor"><input className="qp-input" type="number" min="1" value={line.quantity} onChange={(e) => setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, quantity: Number(e.target.value) } : item))} /></Field>
+                <Field label="Miqdor"><input className="qp-input" inputMode="decimal" value={line.quantity} onChange={(e) => { const value = e.target.value.replace(/[^0-9.]/g, "").replace(/^0+(?=\d)/, ""); setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, quantity: value } : item)); }} /></Field>
                 {db.settings.sales.showStockOnOrder !== false ? <div className="qp-order-line-meta"><span>Sotish mumkin</span><strong className={line.quantity > line.available && !db.settings.inventory.allowNegativeStock ? "danger" : ""}>{line.productId ? line.available : "—"}</strong></div> : null}
                 <div className="qp-order-line-meta"><span>Narx</span><strong>{formatMoney(line.price)}</strong></div>
                 <div className="qp-order-line-meta"><span>Jami</span><strong>{formatMoney(Number(line.quantity || 0) * Number(line.price || 0))}</strong></div>
@@ -82,6 +86,7 @@ function OrderCreatePage() {
               </div>
             ))}
           </div>
+          <div className="qp-form-actions qp-order-add-row"><SecondaryButton type="button" onClick={() => setItems((current) => [...current, { productId: "", quantity: "1" }])}><Plus size={14} /> Qator qo‘shish</SecondaryButton></div>
         </SectionCard>
 
         <SectionCard>

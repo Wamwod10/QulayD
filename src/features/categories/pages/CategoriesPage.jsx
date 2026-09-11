@@ -63,7 +63,7 @@ function CategoriesPage() {
       <SmartTablePage
         title="Kategoriyalar"
         description="Mahsulot guruhlari, ularga bog‘langan mahsulotlar va katalog tartibini bir joydan boshqaring."
-        eyebrow="Katalog"
+        eyebrow="Ombor"
         rows={rows}
         searchFields={["name", "status"]}
         actions={<PrimaryButton onClick={startCreate}><Plus size={15} /> Kategoriya</PrimaryButton>}
@@ -89,7 +89,7 @@ function CategoriesPage() {
         ]}
       />
 
-      <Modal open={open} title={editingId ? "Kategoriyani tahrirlash" : "Yangi kategoriya"} description="Kategoriya Katalog va mahsulot formalarida darhol ko‘rinadi." onClose={() => setOpen(false)}>
+      <Modal open={open} title={editingId ? "Kategoriyani tahrirlash" : "Yangi kategoriya"} description="Kategoriya Ombor va mahsulot formalarida darhol ko‘rinadi." onClose={() => setOpen(false)}>
         <form onSubmit={submit}>
           <Field label="Nomi"><input className="qp-input" value={name} onChange={(event) => setName(event.target.value)} autoFocus /></Field>
           <div className="qp-form-actions"><SecondaryButton type="button" onClick={() => setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit">{editingId ? "Yangilash" : "Saqlash"}</PrimaryButton></div>

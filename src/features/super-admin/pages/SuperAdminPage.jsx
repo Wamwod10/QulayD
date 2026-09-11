@@ -58,7 +58,7 @@ const featureFlagMeta = {
   platformBroadcasts: ["Platforma e’lonlari", "Super Admin e’lonlarini kompaniya va foydalanuvchilarga yetkazish"],
 };
 const moduleMeta = {
-  sales: ["Savdo", "Buyurtmalar va sotuvlar"], pos: ["Tezkor kassa", "POS savdolari"], catalog: ["Katalog", "Mahsulot, kategoriya va narxlar"], inventory: ["Ombor", "Qoldiq va ombor operatsiyalari"], partners: ["Hamkorlar", "Mijoz va yetkazib beruvchilar"], agents: ["Agentlar", "Dala savdo jamoasi"], routes: ["Marshrutlar", "Xarita va route rejalari"], fulfillment: ["Tayyorlash", "Yig‘ish va qadoqlash"], delivery: ["Yetkazib berish", "Reys va haydovchilar"], finance: ["Moliya", "Faktura, to‘lov va qarz"], reports: ["Hisobotlar", "Modullararo analitika"],
+  dashboard: ["Bosh sahifa", "Asosiy ko‘rsatkichlar"], sales: ["Savdo", "Buyurtmalar va sotuvlar"], pos: ["Tezkor kassa", "POS savdolari"], inventory: ["Ombor", "Mahsulot, narx va ombor operatsiyalari"], partners: ["Hamkorlar", "Mijoz va yetkazib beruvchilar"], agents: ["Agentlar", "Dala savdo jamoasi"], routes: ["Marshrutlar", "Xarita va route rejalari"], fulfillment: ["Tayyorlash", "Yig‘ish va qadoqlash"], delivery: ["Yetkazib berish", "Reys va haydovchilar"], finance: ["Moliya", "Faktura, to‘lov va qarz"], reports: ["Hisobotlar", "Modullararo analitika"], settings: ["Sozlamalar", "Kompaniya sozlamalari"],
 };
 
 const sectionMeta = {

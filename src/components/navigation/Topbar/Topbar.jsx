@@ -21,7 +21,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { findNavigationPage, findNavigationSection, flatNavigation } from "../../../app/navigationConfig";
+import { findNavigationPage, findNavigationSection, flatNavigation, getRoutePermission } from "../../../app/navigationConfig";
 import { PERMISSIONS } from "../../../constants/permissions";
 import { useAuth } from "../../../hooks/useAuth";
 import { useModuleAccess } from "../../../hooks/useModuleAccess";
@@ -38,7 +38,7 @@ import styles from "./Topbar.module.scss";
 const quickCreateActions = [
   { label: "Yangi buyurtma", to: "/orders/new", module: "sales", permission: PERMISSIONS.ORDERS_CREATE },
   { label: "Tezkor kassa", to: "/sales/pos", module: "pos", permission: PERMISSIONS.ORDERS_CREATE },
-  { label: "Yangi mahsulot", to: "/products?create=1", module: "catalog", permission: PERMISSIONS.PRODUCTS_MANAGE },
+  { label: "Yangi mahsulot", to: "/inventory/products?create=1", module: "inventory", permission: PERMISSIONS.PRODUCTS_MANAGE },
   { label: "Yangi mijoz", to: "/customers?create=1", module: "partners", permission: PERMISSIONS.CUSTOMERS_MANAGE },
   { label: "Mahsulot kirimi", to: "/inventory/receipts", module: "inventory", permission: PERMISSIONS.INVENTORY_RECEIVE },
   { label: "To‘lov qabul qilish", to: "/payments", module: "finance", permission: PERMISSIONS.PAYMENTS_COLLECT },
@@ -61,7 +61,7 @@ const shortcutGroups = [
       { label: "Yangi buyurtma", keys: "Alt B", to: "/orders/new", module: "sales", permission: PERMISSIONS.ORDERS_CREATE },
       { label: "Tezkor kassa", keys: "Alt P", to: "/sales/pos", module: "pos", permission: PERMISSIONS.ORDERS_CREATE },
       { label: "Yangi mijoz", keys: "Alt C", to: "/customers?create=1", module: "partners", permission: PERMISSIONS.CUSTOMERS_MANAGE },
-      { label: "Yangi mahsulot", keys: "Alt M", to: "/products?create=1", module: "catalog", permission: PERMISSIONS.PRODUCTS_MANAGE },
+      { label: "Yangi mahsulot", keys: "Alt M", to: "/inventory/products?create=1", module: "inventory", permission: PERMISSIONS.PRODUCTS_MANAGE },
     ],
   },
   {
@@ -105,14 +105,15 @@ function Topbar({ onOpenMenu }) {
   const rootRef = useRef(null);
   const searchRef = useRef(null);
   const [searchValue, setSearchValue] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
   const currentSection = findNavigationSection(location.pathname);
   const currentPage = findNavigationPage(location.pathname);
   const pages = useMemo(
-    () => flatNavigation().filter((item) => isEnabled(item.key) && (item.to !== "/sales/pos" || isEnabled("pos"))),
-    [isEnabled],
+    () => flatNavigation().filter((item) => isEnabled(item.key) && can(getRoutePermission(item.to)) && (item.to !== "/sales/pos" || isEnabled("pos"))),
+    [can, isEnabled],
   );
 
   const theme = db.settings.appearance?.themeMode || "light";
@@ -144,6 +145,7 @@ function Topbar({ onOpenMenu }) {
       }
       if (event.key === "Escape") {
         setSearchValue("");
+        setMobileSearchOpen(false);
         setOpenMenu("");
         return;
       }
@@ -166,8 +168,8 @@ function Topbar({ onOpenMenu }) {
       .filter((item) => matches(`${item.group} ${item.label} ${item.description || ""}`))
       .slice(0, 4)
       .map((item) => ({ type: "Sahifa", title: item.label, subtitle: item.group, to: item.to }));
-    const products = isEnabled("catalog") && can(PERMISSIONS.PRODUCTS_VIEW)
-      ? (db.products || []).filter((item) => matches(`${item.name} ${item.sku} ${getProductBarcodes(item).join(" ")}`)).slice(0, 3).map((item) => ({ type: "Mahsulot", title: item.name, subtitle: `SKU ${item.sku}`, to: "/products" }))
+    const products = isEnabled("inventory") && can(PERMISSIONS.PRODUCTS_VIEW)
+      ? (db.products || []).filter((item) => matches(`${item.name} ${item.sku} ${getProductBarcodes(item).join(" ")}`)).slice(0, 3).map((item) => ({ type: "Mahsulot", title: item.name, subtitle: `SKU ${item.sku}`, to: "/inventory/products" }))
       : [];
     const customers = isEnabled("partners") && can(PERMISSIONS.CUSTOMERS_VIEW)
       ? (db.customers || []).filter((item) => matches(`${item.name} ${item.phone || ""} ${item.address || ""}`)).slice(0, 3).map((item) => ({ type: "Mijoz", title: item.name, subtitle: item.phone || item.address, to: "/customers" }))
@@ -209,6 +211,7 @@ function Topbar({ onOpenMenu }) {
     if (to === "/sales/pos") openPosWorkspace(navigate);
     else navigate(to);
     setSearchValue("");
+    setMobileSearchOpen(false);
     setOpenMenu("");
   };
 
@@ -246,14 +249,16 @@ function Topbar({ onOpenMenu }) {
         <div className={styles.pageContext}><strong>{currentSection?.label || "Qulay"}</strong><span>{currentPage?.label || "Boshqaruv markazi"}</span></div>
       </div>
 
-      <div className={styles.searchZone}>
+      <div className={`${styles.searchZone} ${mobileSearchOpen ? styles.mobileSearchOpen : ""}`}>
         <Search size={18} />
         <input ref={searchRef} type="search" value={searchValue} onChange={(event) => setSearchValue(event.target.value)} placeholder="Sahifa, mahsulot, mijoz, buyurtma, xodim yoki reys qidiring..." />
-        {searchValue ? <button type="button" onClick={() => setSearchValue("")}><X size={15} /></button> : <kbd>Ctrl K</kbd>}
+        {searchValue ? <button type="button" className={styles.searchClear} onClick={() => setSearchValue("")}><X size={15} /></button> : <kbd>Ctrl K</kbd>}
+        <button type="button" className={styles.mobileSearchDismiss} onClick={() => { setSearchValue(""); setMobileSearchOpen(false); }} aria-label="Qidiruvni yopish"><X size={17} /></button>
         {searchValue ? <div className={styles.searchResults}>{results.length ? results.map((result, index) => <button type="button" key={`${result.type}-${result.title}-${index}`} onClick={() => go(result.to)}><span>{result.type}</span><div><strong>{result.title}</strong><small>{result.subtitle}</small></div></button>) : <div>Natija topilmadi</div>}</div> : null}
       </div>
 
       <div className={styles.actionZone}>
+        <button type="button" className={styles.mobileSearchButton} onClick={() => { setMobileSearchOpen(true); window.setTimeout(() => searchRef.current?.focus(), 20); }} aria-label="Global qidiruv"><Search size={19} /></button>
         <div className={styles.menuWrap}>
           <button type="button" className={styles.createButton} onClick={() => setOpenMenu(openMenu === "create" ? "" : "create")}><Plus size={16} /><span>Yangi</span><ChevronDown size={14} /></button>
           {openMenu === "create" ? <div className={`${styles.popover} ${styles.createMenu}`}><div className={styles.menuTitle}>Tezkor yaratish</div>{availableCreateActions.map((item) => <button key={item.to} type="button" onClick={() => go(item.to)}>{item.label}</button>)}</div> : null}

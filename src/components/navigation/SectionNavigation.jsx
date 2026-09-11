@@ -2,12 +2,14 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 
-import { findNavigationPage, findNavigationSection } from "../../app/navigationConfig";
-import { useLocalDb } from "../../services/localDb";
+import { findNavigationPage, findNavigationSection, getRoutePermission } from "../../app/navigationConfig";
+import { useModuleAccess } from "../../hooks/useModuleAccess";
+import { usePermissions } from "../../hooks/usePermissions";
 
 function SectionNavigation() {
   const location = useLocation();
-  const modules = useLocalDb((db) => db.settings.modules);
+  const { isEnabled } = useModuleAccess();
+  const { can } = usePermissions();
   const section = findNavigationSection(location.pathname);
   const currentPage = findNavigationPage(location.pathname);
   const tabsRef = useRef(null);
@@ -48,13 +50,14 @@ function SectionNavigation() {
 
   if (!section) return null;
 
-  const isModuleHidden = section.key !== "dashboard" && section.key !== "settings" && modules?.[section.key] === false;
+  const sectionModule = section.key === "operations" ? "dashboard" : section.key;
+  const isModuleHidden = !isEnabled(sectionModule);
   if (isModuleHidden) return null;
 
-  const children = section.children?.filter((child) => {
-    if (section.key === "sales" && child.to === "/sales/pos") return modules?.pos !== false;
-    return true;
-  });
+  const children = section.children?.filter((child) => (
+    can(getRoutePermission(child.to))
+    && (child.to !== "/sales/pos" || isEnabled("pos"))
+  ));
 
   const scrollTabs = (direction) => {
     const element = tabsRef.current;

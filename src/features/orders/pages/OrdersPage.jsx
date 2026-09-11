@@ -11,6 +11,7 @@ import { useAuth } from "../../../hooks/useAuth";
 import { notify } from "../../../services/notify";
 import { formatDateTime, formatMoney, formatRelativeDateTime, getName, shortDate } from "../../../utils/formatters";
 import OrderStatusTimeline from "../components/OrderStatusTimeline";
+import { useModuleAccess } from "../../../hooks/useModuleAccess";
 
 function ownerStage(order) {
   if (order.approvalStatus === "PENDING") return { label: "Tasdiq kutilmoqda", status: "PENDING" };
@@ -36,7 +37,9 @@ function currentResponsibility(db, order) {
   return { label: "Buyurtma", name: agent?.name || "Biznes egasi", since: order.createdAt };
 }
 
-function OrderDetail({ row, db, navigate, isOwner }) {
+function OrderDetail({ row: selectedRow, db, navigate, isOwner }) {
+  const { isEnabled } = useModuleAccess();
+  const row = db.orders.find((item) => item.id === selectedRow.id) || selectedRow;
   const [agentId, setAgentId] = useState(row.agentId || "");
   const responsibility = currentResponsibility(db, row);
   const stage = ownerStage(row);
@@ -78,12 +81,16 @@ function OrderDetail({ row, db, navigate, isOwner }) {
     ? "Tayyorlashga yuborish" : row.fulfillmentStatus !== "READY" && row.fulfillmentStatus !== "COMPLETED"
       ? "Tayyor deb belgilash" : !["PLANNED", "OUT_FOR_DELIVERY", "ARRIVED", "PARTIALLY_DELIVERED", "DELIVERED"].includes(row.deliveryStatus)
         ? "Yetkazishga yuborish" : row.deliveryStatus !== "DELIVERED" ? "Yetkazildi" : "Yakunlangan";
+  const canAct = row.approvalStatus === "PENDING" ? isOwner
+    : !["RESERVED", "PICKING", "PICKED", "PACKING", "PACKED", "READY", "COMPLETED"].includes(row.fulfillmentStatus) ? isEnabled("fulfillment")
+      : row.fulfillmentStatus !== "READY" && row.fulfillmentStatus !== "COMPLETED" ? isEnabled("fulfillment") : isEnabled("delivery");
 
   return <div className="qp-order-owner-detail">
     <section className="qp-order-current-owner"><div><span>Hozirgi bosqich</span><strong>{stage.label}</strong><small>{responsibility.name} · {responsibility.label}{responsibility.since ? ` · ${formatRelativeDateTime(responsibility.since)}` : ""}</small></div>{stage.label === "Yetkazilmoqda" ? <Truck size={22}/> : <PackageCheck size={22}/>}</section>
     <OrderStatusTimeline order={row}/>
-    <section className="qp-order-smart-action"><div><span>Keyingi tavsiya</span><strong>{actionLabel}</strong><small>{row.approvalStatus === "PENDING" ? "Admin yaratgan buyurtma stock band qilinishidan oldin Owner qarorini kutadi." : "Qulay ortiqcha statuslarni yashiradi va keyingi kerakli amalni ko‘rsatadi."}</small></div>{row.deliveryStatus !== "DELIVERED" ? <div className="qp-order-smart-buttons">{row.approvalStatus === "PENDING" && isOwner ? <SecondaryButton onClick={() => { const result = rejectOrderRequest(row.id); notify(result.message, result.ok ? "warning" : "danger"); }}>Rad etish</SecondaryButton> : null}<PrimaryButton disabled={row.approvalStatus === "PENDING" && !isOwner} onClick={nextAction}>{actionLabel}<ArrowRight size={15}/></PrimaryButton></div> : <StatusPill status="COMPLETED"/>}</section>
-    <div className="qp-drawer-details"><div className="qp-drawer-detail-row"><span>Mijoz</span><strong>{row.customer}</strong></div><div className="qp-drawer-detail-row"><span>Summa</span><strong>{formatMoney(row.total)}</strong></div><div className="qp-drawer-detail-row"><span>Ombor</span><strong>{getName(db.warehouses, row.warehouseId)}</strong></div></div>
+    <section className="qp-order-smart-action"><div><span>Keyingi tavsiya</span><strong>{actionLabel}</strong><small>{row.approvalStatus === "PENDING" ? "Admin yaratgan buyurtma stock band qilinishidan oldin Owner qarorini kutadi." : "Qulay ortiqcha statuslarni yashiradi va keyingi kerakli amalni ko‘rsatadi."}</small></div>{row.deliveryStatus !== "DELIVERED" && canAct ? <div className="qp-order-smart-buttons">{row.approvalStatus === "PENDING" && isOwner ? <SecondaryButton onClick={() => { const result = rejectOrderRequest(row.id); notify(result.message, result.ok ? "warning" : "danger"); }}>Rad etish</SecondaryButton> : null}<PrimaryButton onClick={nextAction}>{actionLabel}<ArrowRight size={15}/></PrimaryButton></div> : row.deliveryStatus === "DELIVERED" ? <StatusPill status="COMPLETED"/> : null}</section>
+    <div className="qp-drawer-details"><div className="qp-drawer-detail-row"><span>Mijoz</span><strong>{getName(db.customers, row.customerId)}</strong></div><div className="qp-drawer-detail-row"><span>Summa</span><strong>{formatMoney(row.total)}</strong></div><div className="qp-drawer-detail-row"><span>Ombor</span><strong>{getName(db.warehouses, row.warehouseId)}</strong></div></div>
+    <section className="qp-order-products"><h3>Mahsulotlar</h3><div>{(row.items || []).map((item) => { const product = db.products.find((entry) => entry.id === item.productId); const unit = db.units.find((entry) => entry.id === product?.unitId); return <article key={`${row.id}-${item.productId}`}><div><strong>{product?.name || "Mahsulot"}</strong><span>{item.quantity} {unit?.shortName || unit?.name || ""} × {formatMoney(item.price)}</span></div><strong>{formatMoney(Number(item.quantity || 0) * Number(item.price || 0))}</strong></article>; })}</div></section>
     <section className="qp-order-owner-assignment"><div><UserRound size={16}/><span>Mas’ul agent</span></div><div className="qp-inline-actions"><Select value={agentId} onChange={(event)=>setAgentId(event.target.value)}><option value="">Agent biriktirilmagan</option>{(db.agents || []).filter((agent)=>agent.status === "ACTIVE").map((agent)=><option key={agent.id} value={agent.id}>{agent.name} · {agent.territory || "Hudud yo‘q"}</option>)}</Select><SecondaryButton onClick={saveAgent}>Saqlash</SecondaryButton></div></section>
     <section className="qp-order-activity-detail"><h3>Faoliyat tarixi</h3>{activity.length ? activity.map((entry)=><div key={entry.id}><i/><div><strong>{entry.title}</strong><span>{entry.description || entry.actorName}</span><small>{formatDateTime(entry.createdAt)}</small></div></div>) : <div className="qp-muted">Hali faoliyat yozuvi yo‘q.</div>}</section>
   </div>;

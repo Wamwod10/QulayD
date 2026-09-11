@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import { Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
-import ImageUploader from "../../../components/ui/ImageUploader";
 import Select from "../../../components/ui/Select";
 import { useAuth } from "../../../hooks/useAuth";
 import { createEmployeeIdentity, updateEmployeeRecord } from "../../../services/employeeService";
@@ -13,7 +12,12 @@ import { notify } from "../../../services/notify";
 import { formatMoney } from "../../../utils/formatters";
 import { getRoleLabel } from "../../../utils/labels";
 
-const emptyForm = { name: "", image: "", title: "", phone: "", role: "SALES_AGENT", branch: "Bosh filial", warehouseId: "", territory: "", baseSalary: 0, kpiBonus: 0, salesBonusPercent: 0 };
+const moduleOptions = [
+  ["dashboard", "Bosh sahifa"], ["sales", "Savdo"], ["pos", "Tezkor kassa"], ["inventory", "Ombor"], ["partners", "Hamkorlar"],
+  ["agents", "Agentlar"], ["routes", "Marshrutlar"], ["fulfillment", "Tayyorlash"], ["delivery", "Yetkazib berish"],
+  ["finance", "Moliya"], ["reports", "Hisobotlar"],
+];
+const emptyForm = { name: "", title: "", phone: "", role: "SALES_AGENT", branch: "Bosh filial", warehouseId: "", territory: "", login: "", password: "", pin: "", moduleAccess: ["dashboard"] };
 
 function makeEmployeeTypeCode() {
   return `CUSTOM_${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
@@ -37,10 +41,10 @@ function UsersPage() {
   const agents = rows.filter((item) => (item.role || item.roles?.[0]) === "SALES_AGENT").length;
   const fieldTeam = rows.filter((item) => ["SALES_AGENT", "DELIVERY_DRIVER"].includes(item.role || item.roles?.[0])).length;
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     try {
-      createEmployeeIdentity({ companyId: company?.id, ...form, roles: [form.role] });
+      await createEmployeeIdentity({ companyId: company?.id, ...form });
       setOpen(false);
       setForm(emptyForm);
       notify("Xodim qo‘shildi");
@@ -109,7 +113,7 @@ function UsersPage() {
 
   return <>
     <section className="qp-owner-team-summary">
-      <div><span>Jamoa</span><h2>Xodimlar boshqaruvi</h2><p>Xodimlar Qulay’ga kirmaydi. Owner ularni mas’ul shaxs, hudud, ombor, KPI va operatsion resurs sifatida boshqaradi.</p></div>
+      <div><span>Jamoa</span><h2>Xodimlar boshqaruvi</h2><p>Owner va Admin xodimning hisobini, ish turini va ko‘rinadigan modullarini boshqaradi.</p></div>
       <div className="qp-owner-team-stats"><article><UsersRound size={17}/><span>Jami</span><strong>{rows.length}</strong></article><article><Activity size={17}/><span>Faol</span><strong>{active}</strong></article><article><MapPin size={17}/><span>Dala jamoasi</span><strong>{fieldTeam}</strong></article><article><UsersRound size={17}/><span>Agentlar</span><strong>{agents}</strong></article></div>
     </section>
     <SmartTablePage title="Xodimlar" description="Agent, menejer, omborchi, haydovchi va boshqa xodimlarni bitta katalogdan boshqaring." eyebrow="Jamoa" rows={rows} searchFields={["name", "phone", "title", "roleLabel", "branch", "territory"]} extraSummary={[{label:"Jami xodim",value:rows.length,hint:"Kompaniya jamoasi"},{label:"Faol",value:active,hint:"Operatsiyalarda tanlash mumkin"},{label:"Agent",value:agents,hint:"Savdo xodimlari"},{label:"Faolsiz",value:rows.length-active,hint:"Tarix saqlanadi"}]} actions={<PrimaryButton onClick={() => { setForm(emptyForm); setOpen(true); }}><Plus size={15}/> Xodim qo‘shish</PrimaryButton>} columns={[
@@ -122,9 +126,8 @@ function UsersPage() {
       { key:"status", label:"Holat", render:(row)=><StatusPill status={row.status || "ACTIVE"}/> },
     ]} detailRenderer={(row)=><div className="qp-stack">{row.image ? <img className="qp-product-detail-image" src={row.image} alt={row.name} /> : null}<div className="qp-drawer-details"><div className="qp-drawer-detail-row"><span>Telefon</span><strong>{row.phone || "—"}</strong></div><div className="qp-drawer-detail-row"><span>Lavozim</span><strong>{row.title}</strong></div><div className="qp-drawer-detail-row"><span>Turi</span><strong>{row.roleLabel}</strong></div><div className="qp-drawer-detail-row"><span>Filial</span><strong>{row.branch || "—"}</strong></div><div className="qp-drawer-detail-row"><span>Hudud</span><strong>{row.territory || "—"}</strong></div></div><div className="qp-inline-actions"><SecondaryButton onClick={()=>navigate(`/users/${row.id}`)}><Eye size={15}/> Profil</SecondaryButton><button type="button" className={`qp-button ${row.status === "ACTIVE" ? "qp-button-danger" : "qp-button-secondary"}`} onClick={()=>toggleStatus(row)}>{row.status === "ACTIVE" ? <><PowerOff size={15}/> Faolsizlantirish</> : <><Power size={15}/> Faollashtirish</>}</button></div></div>} />
 
-    <Modal open={open} title="Yangi xodim" description="Xodim biznes jarayonlarida mas’ul shaxs sifatida ishlatiladi. Login yoki parol yaratilmaydi." wide onClose={()=>setOpen(false)}>
+    <Modal open={open} title="Yangi xodim" description="Xodim login va parol yoki shaxsiy PIN orqali Qulay platformasiga kiradi." wide onClose={()=>setOpen(false)}>
       <form onSubmit={submit}><div className="qp-form-grid">
-        <div className="qp-form-span-full"><ImageUploader value={form.image} name={form.name} label="Xodim rasmini yuklash" compact onChange={(image)=>setForm((current)=>({...current,image}))}/></div>
         <Field label="Ism va familiya"><input className="qp-input" value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})} autoFocus/></Field>
         <Field label="Lavozim"><input className="qp-input" value={form.title} onChange={(e)=>setForm({...form,title:e.target.value})} placeholder="Masalan: Savdo agenti"/></Field>
         <Field label="Telefon"><input className="qp-input" inputMode="tel" value={form.phone} onChange={(e)=>setForm({...form,phone:e.target.value})} placeholder="+998 90 123 45 67"/></Field>
@@ -132,9 +135,10 @@ function UsersPage() {
         <Field label="Filial"><input className="qp-input" value={form.branch} onChange={(e)=>setForm({...form,branch:e.target.value})}/></Field>
         <Field label="Ombor"><Select value={form.warehouseId} onChange={(e)=>setForm({...form,warehouseId:e.target.value})}><option value="">Biriktirilmagan</option>{db.warehouses.map((warehouse)=><option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select></Field>
         <Field label="Hudud"><input className="qp-input" value={form.territory} onChange={(e)=>setForm({...form,territory:e.target.value})} placeholder="Masalan: Chilonzor"/></Field>
-        <Field label="Bazaviy oylik"><input className="qp-input" type="number" min="0" value={form.baseSalary} onChange={(e)=>setForm({...form,baseSalary:e.target.value})}/></Field>
-        <Field label="KPI bonusi"><input className="qp-input" type="number" min="0" value={form.kpiBonus} onChange={(e)=>setForm({...form,kpiBonus:e.target.value})}/></Field>
-        <Field label="Savdo bonusi (%)"><input className="qp-input" type="number" min="0" max="100" value={form.salesBonusPercent} onChange={(e)=>setForm({...form,salesBonusPercent:e.target.value})}/></Field>
+        <Field label="Login"><input className="qp-input" autoComplete="off" value={form.login} onChange={(e)=>setForm({...form,login:e.target.value.replace(/\s/g, "")})}/></Field>
+        <Field label="Parol"><input className="qp-input" type="password" autoComplete="new-password" value={form.password} onChange={(e)=>setForm({...form,password:e.target.value})}/></Field>
+        <Field label="PIN"><input className="qp-input" type="password" inputMode="numeric" maxLength={6} autoComplete="new-password" value={form.pin} onChange={(e)=>setForm({...form,pin:e.target.value.replace(/\D/g, "").slice(0, 6)})} placeholder="6 ta raqam"/></Field>
+        <div className="qp-form-span-full"><span className="qp-field-label">Modullar</span><div className="qp-module-selector">{moduleOptions.map(([key,label])=><label key={key}><input type="checkbox" checked={form.moduleAccess.includes(key)} onChange={(event)=>setForm((current)=>({...current,moduleAccess:event.target.checked?[...current.moduleAccess,key]:current.moduleAccess.filter((item)=>item!==key)}))}/><span>{label}</span></label>)}</div></div>
       </div><div className="qp-form-actions"><SecondaryButton type="button" onClick={()=>setOpen(false)}>Bekor qilish</SecondaryButton><SecondaryButton type="button" onClick={openTypeCreate}>Xodim turlarini boshqarish</SecondaryButton><PrimaryButton type="submit"><Plus size={15}/> Xodim qo‘shish</PrimaryButton></div></form>
     </Modal>
 

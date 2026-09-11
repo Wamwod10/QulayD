@@ -26,22 +26,13 @@ export const navigationConfig = [
     ],
   },
   {
-    key: "catalog",
-    label: "Katalog",
-    icon: "catalog",
-    children: [
-      { label: "Mahsulotlar", description: "Yagona mahsulotlar katalogi", to: "/products" },
-      { label: "Kategoriyalar", description: "Mahsulot guruhlari", to: "/categories" },
-      { label: "O‘lchov birliklari", description: "Dona, quti, kilogramm va boshqalar", to: "/units" },
-      { label: "Narxlar", description: "Mahsulot narxlarini boshqarish", to: "/pricing" },
-      { label: "Narx ro‘yxatlari", description: "Chakana, ulgurji va maxsus narxlar", to: "/price-lists" },
-    ],
-  },
-  {
     key: "inventory",
     label: "Ombor",
     icon: "inventory",
     children: [
+      { label: "Mahsulotlar", description: "Savdo va ombor uchun mahsulotlar", to: "/inventory/products" },
+      { label: "Kategoriyalar", description: "Mahsulot guruhlari", to: "/inventory/categories" },
+      { label: "Narxlar", description: "Mahsulot narxlarini boshqarish", to: "/inventory/pricing" },
       { label: "Qoldiqlar", description: "Haqiqiy, band qilingan va sotish mumkin bo‘lgan qoldiq", to: "/inventory" },
       { label: "Mahsulot kirimi", description: "Omborga mahsulot qabul qilish", to: "/inventory/receipts" },
       { label: "Harakatlar", description: "Barcha kirim va chiqimlar tarixi", to: "/inventory/movements" },
@@ -149,6 +140,9 @@ export const navigationConfig = [
       { label: "Modullar", description: "Platforma bo‘limlarini yoqish yoki o‘chirish", to: "/settings/modules" },
       { label: "Savdo", description: "Buyurtma va chegirma qoidalari", to: "/settings/sales" },
       { label: "Tezkor kassa", description: "Kassa va to‘lov sozlamalari", to: "/settings/pos" },
+      { label: "To‘lov usullari", description: "Kassa va moliyadagi to‘lov usullari", to: "/settings/payment-methods" },
+      { label: "O‘lchov birliklari", description: "Dona, quti, kilogramm va boshqalar", to: "/settings/units" },
+      { label: "Narx ro‘yxatlari", description: "Sotuv narxi, tannarx va maxsus narxlar", to: "/settings/price-lists" },
       { label: "Ombor", description: "Qoldiq va band qilish qoidalari", to: "/settings/inventory" },
       { label: "Agentlar", description: "Hudud, xarita va agent boshqaruvi", to: "/settings/agents" },
       { label: "Yetkazib berish", description: "Yetkazib berish tasdig‘i va qoidalari", to: "/settings/delivery" },
@@ -199,3 +193,45 @@ export function getNavigationDefaultPath(item) {
   if (item.key === "sales") return item.children?.find((child) => child.to === "/orders")?.to || item.children?.[0]?.to || "/dashboard";
   return item.children?.[0]?.to || "/dashboard";
 }
+
+export function getRouteModule(pathname = "") {
+  const path = pathname.replace(/^\//, "").split("?")[0];
+  if (path === "dashboard" || path === "operations") return "dashboard";
+  if (path.startsWith("help")) return "";
+  if (path === "notifications") return "";
+  if (path === "sales/pos") return "pos";
+  if (["orders", "orders/new", "sales", "returns"].includes(path)) return "sales";
+  if (path.startsWith("inventory") || path === "warehouses" || path === "catalog" || ["products", "categories", "pricing"].includes(path) || path.startsWith("catalog/")) return path.includes("units") || path.includes("price-lists") ? "settings" : "inventory";
+  if (["customers", "suppliers", "partners/contacts"].includes(path)) return "partners";
+  if (path.startsWith("agents") || path === "visits") return "agents";
+  if (path.startsWith("routes")) return "routes";
+  if (path.startsWith("fulfillment")) return "fulfillment";
+  if (path.startsWith("deliver") || path === "delivery-trips") return "delivery";
+  if (["finance", "invoices", "payments", "debt", "ledger", "currency-rates"].includes(path)) return "finance";
+  if (path.startsWith("reports")) return "reports";
+  return "settings";
+}
+
+export function getRoutePermission(pathname = "") {
+  const path = pathname.replace(/^\//, "").split("?")[0];
+  if (path === "operations") return PERMISSIONS.DASHBOARD_VIEW;
+  if (path === "users" || path.startsWith("users/")) return PERMISSIONS.USERS_MANAGE;
+  if (path.startsWith("settings") || ["units", "price-lists"].includes(path) || path.includes("catalog/units") || path.includes("catalog/price-lists")) return PERMISSIONS.SETTINGS_MANAGE;
+  if (path.startsWith("reports")) return PERMISSIONS.REPORTS_VIEW;
+  if (path.startsWith("help")) return "";
+  if (path === "notifications") return "";
+  if (path === "payments") return PERMISSIONS.PAYMENTS_VIEW;
+  if (["finance", "invoices", "debt", "ledger", "currency-rates"].includes(path)) return PERMISSIONS.FINANCE_VIEW;
+  if (path === "deliveries/planning") return PERMISSIONS.DELIVERY_PLAN;
+  if (path.startsWith("deliver") || path === "delivery-trips") return PERMISSIONS.DELIVERY_VIEW;
+  if (path.startsWith("fulfillment")) return PERMISSIONS.FULFILLMENT_VIEW;
+  if (path === "inventory/receipts") return PERMISSIONS.INVENTORY_RECEIVE;
+  if (path === "inventory/transfers") return PERMISSIONS.INVENTORY_TRANSFER;
+  if (path === "inventory/adjustments") return PERMISSIONS.INVENTORY_ADJUST;
+  if (path.startsWith("inventory") || path === "warehouses" || path === "catalog" || ["products", "categories", "pricing"].includes(path) || path.startsWith("catalog/")) return path === "catalog" || path.includes("products") || path.includes("categories") || path.includes("pricing") ? PERMISSIONS.PRODUCTS_VIEW : PERMISSIONS.INVENTORY_VIEW;
+  if (path === "orders/new" || path === "sales/pos") return PERMISSIONS.ORDERS_CREATE;
+  if (["orders", "sales", "returns"].includes(path)) return PERMISSIONS.ORDERS_VIEW;
+  if (["customers", "suppliers", "partners/contacts"].includes(path)) return PERMISSIONS.CUSTOMERS_VIEW;
+  return PERMISSIONS.DASHBOARD_VIEW;
+}
+import { PERMISSIONS } from "../constants/permissions";

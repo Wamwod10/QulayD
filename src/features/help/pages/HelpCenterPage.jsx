@@ -5,12 +5,18 @@ import { useNavigate, useParams } from "react-router-dom";
 import { PageShell, SecondaryButton } from "../../../components/prototype/PrototypeUI";
 import ProcessDiagram from "../components/ProcessDiagram";
 import { allHelpArticles, HELP_CATEGORIES } from "../content/helpContent";
+import { useModuleAccess } from "../../../hooks/useModuleAccess";
+import { usePermissions } from "../../../hooks/usePermissions";
+import { getRouteModule, getRoutePermission } from "../../../app/navigationConfig";
 
 function HelpCenterPage() {
   const { articleId } = useParams();
   const navigate = useNavigate();
+  const { isEnabled } = useModuleAccess();
+  const { can } = usePermissions();
   const [query, setQuery] = useState("");
-  const articles = useMemo(() => allHelpArticles(), []);
+  const articles = useMemo(() => allHelpArticles().filter((article) => (article.steps || []).every((step) => !step.path || (isEnabled(getRouteModule(step.path)) && can(getRoutePermission(step.path))))), [can, isEnabled]);
+  const visibleCategories = useMemo(() => HELP_CATEGORIES.map((category) => ({ ...category, articles: category.articles.filter((article) => articles.some((item) => item.id === article.id)) })).filter((category) => category.articles.length), [articles]);
   const selected = articleId ? articles.find((item) => item.id === articleId) : null;
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase("uz-UZ");
@@ -30,7 +36,7 @@ function HelpCenterPage() {
           <aside className="qp-card">
             <strong>{selected.title}</strong>
             <p>{selected.summary}</p>
-            <div>{HELP_CATEGORIES.map((category) => <button type="button" key={category.id} onClick={() => navigate("/help")}>{category.title}</button>)}</div>
+            <div>{visibleCategories.map((category) => <button type="button" key={category.id} onClick={() => navigate("/help")}>{category.title}</button>)}</div>
           </aside>
           <article className="qp-card">
             <span className="qp-help-eyebrow"><BookOpen size={15} /> Amaliy qo‘llanma</span>
@@ -48,7 +54,7 @@ function HelpCenterPage() {
               </section>
             ) : null}
             <div className="qp-help-copy">{(selected.body || []).map((text) => <p key={text}>{text}</p>)}</div>
-            <div className="qp-help-tip"><CircleHelp size={18} /><div><strong>Qulay prinsipi</strong><span>Ownerga ortiqcha texnik statuslar emas, keyingi kerakli biznes amali ko‘rsatiladi.</span></div></div>
+            <div className="qp-help-tip"><CircleHelp size={18} /><div><strong>Qulay prinsipi</strong><span>Foydalanuvchiga ruxsat berilgan jarayon va keyingi kerakli biznes amali ko‘rsatiladi.</span></div></div>
           </article>
         </div>
       </PageShell>
@@ -80,7 +86,7 @@ function HelpCenterPage() {
           </section>
           <section className="qp-card qp-help-category-list">
             <div className="qp-help-section-title"><span>Barcha mavzular</span><strong>{articles.length} ta qo‘llanma</strong></div>
-            {HELP_CATEGORIES.map((category) => (
+            {visibleCategories.map((category) => (
               <article key={category.id}>
                 <div><CircleHelp size={17} /><span><strong>{category.title}</strong><small>{category.description}</small></span><b>{category.articles.length}</b></div>
                 <section>{category.articles.map((article) => <button type="button" key={article.id} onClick={() => navigate(`/help/${article.id}`)}><span><strong>{article.title}</strong><small>{article.summary}</small></span><ChevronRight size={15} /></button>)}</section>

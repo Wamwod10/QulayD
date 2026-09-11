@@ -26,7 +26,6 @@ export function createProduct(payload) {
     const sku = String(payload.sku || generated.sku).trim();
     const requestedBarcodes = Array.isArray(payload.barcodes) ? payload.barcodes : [payload.barcode || generated.barcode];
     const barcodes = Array.from(new Set(requestedBarcodes.map((value) => String(value || "").trim()).filter(Boolean)));
-    if (!barcodes.length) barcodes.push(generated.barcode);
     const duplicateSku = db.products.some((product) => String(product.sku || "").trim().toLowerCase() === sku.toLowerCase());
     if (duplicateSku) throw new Error("Bu SKU boshqa mahsulotda mavjud.");
     const existingBarcodes = collectProductBarcodes(db.products);
@@ -36,7 +35,7 @@ export function createProduct(payload) {
       id: makeId("prd"),
       name: payload.name.trim(),
       sku,
-      barcode: barcodes[0],
+      barcode: barcodes[0] || "",
       barcodes,
       image: String(payload.image || ""),
       categoryId: payload.categoryId,

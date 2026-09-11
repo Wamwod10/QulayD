@@ -1,11 +1,12 @@
 import ImageUploader from "../../../components/ui/ImageUploader";
 import Select from "../../../components/ui/Select";
 import { getLanguageLabel } from "../../../i18n";
-import { Download, RotateCcw, ShieldCheck, Smartphone, Upload, Wifi, WifiOff } from "lucide-react";
+import { Download, Plus, RotateCcw, ShieldCheck, Smartphone, Upload, Wifi, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
   Field,
+  Modal,
   PageShell,
   PrimaryButton,
   SecondaryButton,
@@ -31,6 +32,7 @@ const nav = [
   ["modules", "Modullar"],
   ["sales", "Savdo"],
   ["pos", "Tezkor kassa"],
+  ["payment-methods", "To‘lov usullari"],
   ["inventory", "Ombor"],
   ["agents", "Agentlar"],
   ["delivery", "Yetkazib berish"],
@@ -238,7 +240,6 @@ function ModulesSettings({ db }) {
   const labels = {
     sales: "Savdo",
     pos: "Tezkor kassa",
-    catalog: "Katalog",
     inventory: "Ombor",
     partners: "Hamkorlar",
     agents: "Agentlar",
@@ -329,6 +330,30 @@ function PosSettings({ db }) {
       </div>
     </SectionCard>
   );
+}
+
+function PaymentMethodsSettings({ db }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", shortcut: "", commissionType: "NONE" });
+  const submit = (event) => {
+    event.preventDefault();
+    const name = form.name.trim();
+    if (!name) { notify("To‘lov usuli nomini kiriting", "warning"); return; }
+    if ((db.paymentMethods || []).some((item) => item.name.toLowerCase() === name.toLowerCase())) { notify("Bu nomdagi to‘lov usuli mavjud", "warning"); return; }
+    updateLocalDb((draft) => { draft.paymentMethods.push({ id: `pm-${Date.now().toString(36)}`, code: `CUSTOM_${Date.now().toString(36).toUpperCase()}`, ...form, name, status: "ACTIVE" }); });
+    setForm({ name: "", shortcut: "", commissionType: "NONE" }); setOpen(false); notify("To‘lov usuli yaratildi");
+  };
+  return <>
+    <SectionCard title="To‘lov usullari" description="Bu yagona ro‘yxat POS, moliya, to‘lov tarixi, chek va hisobotlarda ishlatiladi.">
+      <div className="qp-settings-panel">{(db.paymentMethods || []).map((method)=><SettingRow key={method.id} title={method.name} description={`${method.shortcut || "Tezkor klavish yo‘q"} · ${method.commissionType === "PERCENT" ? "Foizli komissiya" : method.commissionType === "FIXED" ? "Belgilangan komissiya" : "Komissiyasiz"}`}><strong>{method.code}</strong></SettingRow>)}</div>
+      <div className="qp-form-actions"><PrimaryButton type="button" onClick={()=>setOpen(true)}><Plus size={15}/> To‘lov usuli</PrimaryButton></div>
+    </SectionCard>
+    <Modal open={open} title="Yangi to‘lov usuli" onClose={()=>setOpen(false)}><form onSubmit={submit}><div className="qp-form-grid">
+      <Field label="Nom"><input required className="qp-input" value={form.name} onChange={(event)=>setForm({...form,name:event.target.value})} placeholder="Masalan: Click"/></Field>
+      <Field label="Tezkor klavish"><input className="qp-input" value={form.shortcut} onChange={(event)=>setForm({...form,shortcut:event.target.value.toUpperCase()})} placeholder="Masalan: F4"/></Field>
+      <Field label="Komissiya turi"><Select value={form.commissionType} onChange={(event)=>setForm({...form,commissionType:event.target.value})}><option value="NONE">Komissiyasiz</option><option value="PERCENT">Foiz</option><option value="FIXED">Belgilangan summa</option></Select></Field>
+    </div><div className="qp-form-actions"><SecondaryButton type="button" onClick={()=>setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit">Saqlash</PrimaryButton></div></form></Modal>
+  </>;
 }
 
 function MobileSettings({ db }) {
@@ -548,6 +573,7 @@ function SettingsContent({ section, db }) {
   if (section === "general") return <GeneralSettings db={db} />;
   if (section === "sales") return <SalesSettings db={db} />;
   if (section === "pos") return <PosSettings db={db} />;
+  if (section === "payment-methods") return <PaymentMethodsSettings db={db} />;
   if (section === "documents") return <DocumentsSettings db={db} />;
   if (section === "maps") return <MapsSettings db={db} />;
   if (section === "locale") return <LocaleSettings db={db} />;

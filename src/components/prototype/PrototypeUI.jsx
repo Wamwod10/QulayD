@@ -1,4 +1,5 @@
-import { ArrowUpRight, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, X } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { NavLink } from "react-router-dom";
 
 import SectionNavigation from "../navigation/SectionNavigation";
@@ -60,13 +61,14 @@ export function SearchBox({ value, onChange, placeholder = "Qidirish..." }) {
 }
 
 export function Modal({ open, title, description = "", onClose, children, wide = false }) {
+  useOverlayLifecycle(open, onClose);
   if (!open) return null;
   return (
     <div className="qp-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className={`qp-modal ${wide ? "qp-modal-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="qp-modal-head">
           <div><h2>{title}</h2>{description ? <p>{description}</p> : null}</div>
-          <button className="qp-icon-button" type="button" onClick={onClose} aria-label="Yopish"><X size={18} /></button>
+          <button className="qp-icon-button qp-overlay-close" type="button" onClick={onClose} aria-label="Yopish"><ArrowLeft className="qp-overlay-back-icon" size={19} /><X className="qp-overlay-x-icon" size={18} /></button>
         </div>
         <div className="qp-modal-body">{children}</div>
       </div>
@@ -75,6 +77,7 @@ export function Modal({ open, title, description = "", onClose, children, wide =
 }
 
 export function Drawer({ open, title, description = "", onClose, children, actions = null }) {
+  useOverlayLifecycle(open, onClose);
   if (!open) return null;
   return (
     <div className="qp-drawer-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -85,13 +88,31 @@ export function Drawer({ open, title, description = "", onClose, children, actio
             <h2>{title}</h2>
             {description ? <p>{description}</p> : null}
           </div>
-          <button className="qp-icon-button" type="button" onClick={onClose} aria-label="Yopish"><X size={18} /></button>
+          <button className="qp-icon-button qp-overlay-close" type="button" onClick={onClose} aria-label="Yopish"><ArrowLeft className="qp-overlay-back-icon" size={19} /><X className="qp-overlay-x-icon" size={18} /></button>
         </div>
         <div className="qp-drawer-body">{children}</div>
         {actions ? <div className="qp-drawer-actions">{actions}</div> : null}
       </aside>
     </div>
   );
+}
+
+function useOverlayLifecycle(open, onClose) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    if (!open) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") onCloseRef.current?.();
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
 }
 
 export function Field({ label, children, hint = "" }) {

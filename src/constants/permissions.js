@@ -34,6 +34,7 @@ const ALL = Object.values(PERMISSIONS);
 export const ROLE_PERMISSIONS = Object.freeze({
   OWNER: ALL,
   ADMIN: ALL,
+  EMPLOYEE: [],
   SUPER_ADMIN: [],
 });
 

@@ -11,17 +11,24 @@ import {
   CheckCircle2,
   Circle,
   ArrowRight,
+  ClipboardCheck,
+  PlusCircle,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { Metric, PageShell, SectionCard } from "../../../components/prototype/PrototypeUI";
+import { Metric, PageShell, QuickLink, SectionCard } from "../../../components/prototype/PrototypeUI";
 import { getFinanceSummary } from "../../../services/financeSelectors";
 import { useLocalDb } from "../../../services/localDb";
 import { getOperationalAgents } from "../../../services/employeeSelectors";
 import { formatMoney, formatNumber } from "../../../utils/formatters";
+import { useModuleAccess } from "../../../hooks/useModuleAccess";
+import { useAuth } from "../../../hooks/useAuth";
 
 function DashboardPage() {
   const db = useLocalDb();
+  const { isEnabled } = useModuleAccess();
+  const { user } = useAuth();
+  const canConfigure = user?.roles?.some((role) => ["OWNER", "ADMIN"].includes(role));
   const today = new Date().toISOString().slice(0, 10);
   const todaySales = db.sales.filter((item) => item.date === today);
   const todayOrders = db.orders.filter((item) => item.date === today);
@@ -45,20 +52,23 @@ function DashboardPage() {
   const debtCustomers = finance.debtorCount;
   const operationalAgents = getOperationalAgents(db);
   const agentBehind = operationalAgents.filter((agent) => Number(agent.visitsToday || 0) < Number(agent.plannedVisitsToday || agent.visitsToday || 0)).length;
+  const approvalRequests = db.orders.filter((item) => item.approvalStatus === "PENDING").length
+    + (db.approvals || []).filter((item) => item.status === "PENDING").length;
+  const issueCount = lowStock + failedDelivery + agentBehind;
 
   const facts = [
-    { label: "Sotilgan mahsulot", value: `${formatNumber(soldUnits)} dona`, hint: "Bugungi haqiqiy sotuv", icon: <ShoppingBag size={16} /> },
-    { label: "Faol mijozlar", value: `${activeCustomers} ta`, hint: `${debtCustomers} ta qarzdor`, icon: <UserRoundCheck size={16} /> },
-    { label: "Tasdiqlangan buyurtma", value: `${confirmedOrders} ta`, hint: `${pickingOrders} ta tayyorlash oqimida`, icon: <PackageCheck size={16} /> },
-    { label: "Band qilingan mahsulot", value: `${formatNumber(reservedUnits)} dona`, hint: "Buyurtmalar uchun band", icon: <Boxes size={16} /> },
-    { label: "Bugungi tushum", value: formatMoney(todayPaymentTotal), hint: `${todayPayments.length} ta tasdiqlangan to‘lov`, icon: <CircleDollarSign size={16} /> },
-    { label: "Yetkazilgan", value: `${deliveredToday} ta`, hint: `${failedDelivery} ta muammoli`, icon: <Truck size={16} /> },
-  ];
+    isEnabled("sales") ? { label: "Sotilgan mahsulot", value: `${formatNumber(soldUnits)} dona`, hint: "Bugungi haqiqiy sotuv", icon: <ShoppingBag size={16} /> } : null,
+    isEnabled("partners") ? { label: "Faol mijozlar", value: `${activeCustomers} ta`, hint: "Faol hamkorlar", icon: <UserRoundCheck size={16} /> } : null,
+    isEnabled("sales") ? { label: "Tasdiqlangan buyurtma", value: `${confirmedOrders} ta`, hint: `${isEnabled("fulfillment") ? pickingOrders : 0} ta tayyorlash oqimida`, icon: <PackageCheck size={16} /> } : null,
+    isEnabled("inventory") ? { label: "Band qilingan mahsulot", value: `${formatNumber(reservedUnits)} dona`, hint: "Buyurtmalar uchun band", icon: <Boxes size={16} /> } : null,
+    isEnabled("finance") ? { label: "Bugungi tushum", value: formatMoney(todayPaymentTotal), hint: `${todayPayments.length} ta tasdiqlangan to‘lov`, icon: <CircleDollarSign size={16} /> } : null,
+    isEnabled("delivery") ? { label: "Yetkazilgan", value: `${deliveredToday} ta`, hint: `${failedDelivery} ta muammoli`, icon: <Truck size={16} /> } : null,
+  ].filter(Boolean);
 
   const setupSteps = [
     { label: "Kompaniya ma’lumotlari", done: Boolean(db.settings?.company?.name), to: "/settings/general", help: "first-setup" },
     { label: "Asosiy ombor", done: (db.warehouses || []).length > 0, to: "/warehouses", help: "first-setup" },
-    { label: "Mahsulotlar", done: (db.products || []).length > 0, to: "/products", help: "first-setup" },
+    { label: "Mahsulotlar", done: (db.products || []).length > 0, to: "/inventory/products", help: "first-setup" },
     { label: "Xodim", done: (db.users || []).some((item) => !(item.roles || []).includes("OWNER") && item.primaryRole !== "OWNER"), to: "/users", help: "first-employee" },
     { label: "Mijoz", done: (db.customers || []).length > 0, to: "/customers", help: "first-order" },
     { label: "Birinchi buyurtma", done: (db.orders || []).length > 0, to: "/orders/new", help: "first-order" },
@@ -66,21 +76,34 @@ function DashboardPage() {
   const setupDone = setupSteps.filter((item) => item.done).length;
 
   const attention = [
-    lowStock ? { to: "/inventory", value: `${lowStock} ta`, title: "Kam qoldiq", text: "Minimal qoldiq chegarasiga yetgan pozitsiyalar", tone: "warning" } : null,
-    debtCustomers ? { to: "/debt", value: `${debtCustomers} ta`, title: "Qarzdor mijoz", text: `${formatMoney(totalDebt)} umumiy qarzdorlik`, tone: "danger" } : null,
-    failedDelivery ? { to: "/deliveries", value: `${failedDelivery} ta`, title: "Muammoli yetkazish", text: "Qayta rejalash yoki sababini tekshirish kerak", tone: "danger" } : null,
-    agentBehind ? { to: "/agents/today", value: `${agentBehind} ta`, title: "Agent rejasidan ortda", text: "Bugungi tashrif rejasi bajarilishi past", tone: "warning" } : null,
+    isEnabled("inventory") && lowStock ? { to: "/inventory", value: `${lowStock} ta`, title: "Kam qoldiq", text: "Minimal qoldiq chegarasiga yetgan pozitsiyalar", tone: "warning" } : null,
+    isEnabled("finance") && debtCustomers ? { to: "/debt", value: `${debtCustomers} ta`, title: "Qarzdor mijoz", text: `${formatMoney(totalDebt)} umumiy qarzdorlik`, tone: "danger" } : null,
+    isEnabled("delivery") && failedDelivery ? { to: "/deliveries", value: `${failedDelivery} ta`, title: "Muammoli yetkazish", text: "Qayta rejalash yoki sababini tekshirish kerak", tone: "danger" } : null,
+    isEnabled("agents") && agentBehind ? { to: "/agents/today", value: `${agentBehind} ta`, title: "Agent rejasidan ortda", text: "Bugungi tashrif rejasi bajarilishi past", tone: "warning" } : null,
   ].filter(Boolean);
 
   return (
     <PageShell title="Bosh sahifa" description="Rahbar uchun eng kerakli aniq sonlar, muhim holatlar va kelajakdagi Qulay AI boshqaruv markazi." eyebrow="Qulay boshqaruv markazi">
-      {setupDone < setupSteps.length ? <section className="qp-onboarding-card"><div className="qp-onboarding-head"><div><span>Yangi foydalanuvchi uchun</span><h2>Qulay’ni ishga tayyorlang</h2><p>Asosiy sozlamalarni bir marta tugating — keyingi biznes jarayonlari ancha tushunarli ishlaydi.</p></div><b>{setupDone}/{setupSteps.length}</b></div><div className="qp-onboarding-progress"><i style={{ width: `${Math.round((setupDone / setupSteps.length) * 100)}%` }}/></div><div className="qp-onboarding-steps">{setupSteps.map((step) => <div className={step.done ? "done" : ""} key={step.label}>{step.done ? <CheckCircle2 size={17}/> : <Circle size={17}/>}<span>{step.label}</span>{!step.done ? <><Link to={step.to}>Bajarish <ArrowRight size={14}/></Link><Link className="help" to={`/help/${step.help}`}>Qanday ishlaydi?</Link></> : <small>Tayyor</small>}</div>)}</div></section> : null}
+      {canConfigure && setupDone < setupSteps.length ? <section className="qp-onboarding-card"><div className="qp-onboarding-head"><div><span>Yangi foydalanuvchi uchun</span><h2>Qulay’ni ishga tayyorlang</h2><p>Asosiy sozlamalarni bir marta tugating — keyingi biznes jarayonlari ancha tushunarli ishlaydi.</p></div><b>{setupDone}/{setupSteps.length}</b></div><div className="qp-onboarding-progress"><i style={{ width: `${Math.round((setupDone / setupSteps.length) * 100)}%` }}/></div><div className="qp-onboarding-steps">{setupSteps.map((step) => <div className={step.done ? "done" : ""} key={step.label}>{step.done ? <CheckCircle2 size={17}/> : <Circle size={17}/>}<span>{step.label}</span>{!step.done ? <><Link to={step.to}>Bajarish <ArrowRight size={14}/></Link><Link className="help" to={`/help/${step.help}`}>Qanday ishlaydi?</Link></> : <small>Tayyor</small>}</div>)}</div></section> : null}
       <div className="qp-metrics qp-dashboard-metrics">
-        <Metric label="Bugungi savdo" value={formatMoney(todaySalesTotal)} hint={`${todaySales.length} ta haqiqiy sotuv`} icon={<WalletCards size={16} />} />
-        <Metric label="Bugungi buyurtmalar" value={todayOrders.length} hint={`${confirmedOrders} ta tasdiqlangan`} icon={<ShoppingBag size={16} />} />
-        <Metric label="Umumiy qarzdorlik" value={formatMoney(totalDebt)} hint={`${debtCustomers} ta mijoz`} icon={<CircleDollarSign size={16} />} />
-        <Metric label="Yetkazilmoqda" value={activeDelivery} hint={`${deliveredToday} ta yakunlangan`} icon={<Truck size={16} />} />
+        {isEnabled("sales") ? <Metric label="Bugungi savdo" value={formatMoney(todaySalesTotal)} hint={`${todaySales.length} ta haqiqiy sotuv`} icon={<WalletCards size={16} />} /> : null}
+        {isEnabled("finance") ? <Metric label="Tushum" value={formatMoney(todayPaymentTotal)} hint={`${todayPayments.length} ta tasdiqlangan to‘lov`} icon={<CircleDollarSign size={16} />} /> : null}
+        {isEnabled("sales") ? <Metric label="Bugungi buyurtmalar" value={todayOrders.length} hint={`${confirmedOrders} ta tasdiqlangan`} icon={<ShoppingBag size={16} />} /> : null}
+        {isEnabled("finance") ? <Metric label="Umumiy qarzdorlik" value={formatMoney(totalDebt)} hint={`${debtCustomers} ta mijoz`} icon={<CircleDollarSign size={16} />} /> : null}
+        {isEnabled("delivery") ? <Metric label="Yetkazilmoqda" value={activeDelivery} hint={`${deliveredToday} ta yakunlangan`} icon={<Truck size={16} />} /> : null}
+        {canConfigure ? <Metric label="Muammolar" value={issueCount} hint="Tezkor e’tibor talab qiladi" icon={<AlertTriangle size={16} />} /> : null}
+        {canConfigure ? <Metric label="Tasdiq so‘rovlari" value={approvalRequests} hint="Owner/Admin qarorini kutmoqda" icon={<ClipboardCheck size={16} />} /> : null}
+        {isEnabled("inventory") ? <Metric label="Ombor holati" value={lowStock ? `${lowStock} ta kam qoldiq` : "Barqaror"} hint={`${formatNumber(reservedUnits)} dona band qilingan`} icon={<Boxes size={16} />} /> : null}
       </div>
+
+      <SectionCard className="qp-dashboard-mobile-actions" title="Tezkor actionlar" description="Kundalik ishni bir bosishda boshlang.">
+        <div className="qp-dashboard-quick-links">
+          {isEnabled("sales") ? <QuickLink to="/orders/new" title="Yangi buyurtma" description="Savdo buyurtmasini yarating" icon={<PlusCircle size={18} />} /> : null}
+          {isEnabled("inventory") ? <QuickLink to="/inventory" title="Omborni tekshirish" description="Qoldiq va muammolar" icon={<Boxes size={18} />} /> : null}
+          {isEnabled("finance") ? <QuickLink to="/payments" title="To‘lov qabul qilish" description="Mijoz to‘lovini kiriting" icon={<CircleDollarSign size={18} />} /> : null}
+          {canConfigure ? <QuickLink to="/operations" title="Approval va nazorat" description={`${approvalRequests} ta so‘rov kutilmoqda`} icon={<ClipboardCheck size={18} />} /> : null}
+        </div>
+      </SectionCard>
 
       <div className="qp-dashboard-v4-grid">
         <SectionCard title="Bugungi holat" description="Grafik o‘rniga tez qaror qilish uchun aniq operatsion sonlar.">

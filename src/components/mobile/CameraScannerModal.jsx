@@ -7,6 +7,10 @@ function CameraScannerModal({ open, onClose, onDetected, title = "Shtrix-kod ska
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const animationRef = useRef(0);
+  const onCloseRef = useRef(onClose);
+  const onDetectedRef = useRef(onDetected);
+  onCloseRef.current = onClose;
+  onDetectedRef.current = onDetected;
   const [manual, setManual] = useState("");
   const [status, setStatus] = useState("Kamera tayyorlanmoqda...");
 
@@ -48,8 +52,8 @@ function CameraScannerModal({ open, onClose, onDetected, title = "Shtrix-kod ska
               const codes = await detector.detect(videoRef.current);
               const value = codes?.[0]?.rawValue;
               if (value) {
-                onDetected?.(value);
-                onClose?.();
+                onDetectedRef.current?.(value);
+                onCloseRef.current?.();
                 return;
               }
             } catch {
@@ -68,7 +72,7 @@ function CameraScannerModal({ open, onClose, onDetected, title = "Shtrix-kod ska
 
     start();
     return () => { cancelled = true; stop(); };
-  }, [onClose, onDetected, open]);
+  }, [open]);
 
   const submitManual = (event) => {
     event.preventDefault();

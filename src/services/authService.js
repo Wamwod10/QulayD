@@ -1,3 +1,5 @@
+import { hashDevicePin } from "../utils/deviceSecurity";
+
 const DIRECTORY_KEY = "qulay.auth.directory.v1";
 const SESSION_KEY = "qulay.auth.session.v1";
 const AUTH_EVENT = "qulay:auth-change";
@@ -7,7 +9,7 @@ const normalizePhone = (value = "") => String(value).replace(/[^\d+]/g, "").trim
 
 const DEFAULT_COMPANY_ID = "cmp-demo";
 
-const PLATFORM_MODULE_KEYS = ["sales", "pos", "catalog", "inventory", "partners", "agents", "routes", "fulfillment", "delivery", "finance", "reports"];
+const PLATFORM_MODULE_KEYS = ["dashboard", "sales", "pos", "inventory", "partners", "agents", "routes", "fulfillment", "delivery", "finance", "reports", "settings"];
 
 function defaultPlatformSettings() {
   return {
@@ -33,7 +35,7 @@ function defaultPlatformSettings() {
 
 function seedDirectory() {
   return {
-    version: 2,
+    version: 3,
     platformSettings: defaultPlatformSettings(),
     companies: [
       {
@@ -105,16 +107,17 @@ function ensureDirectory() {
   if (!current.platformSettings) { current.platformSettings = defaultPlatformSettings(); changed = true; }
   if (!current.platformSettings.modules) { current.platformSettings.modules = defaultPlatformSettings().modules; changed = true; }
   if (!current.platformSettings.plans) { current.platformSettings.plans = defaultPlatformSettings().plans; changed = true; }
+  if (current.platformSettings.modules.catalog) { delete current.platformSettings.modules.catalog; changed = true; }
   if (!Array.isArray(current.platformSettings.supportTickets)) { current.platformSettings.supportTickets = []; changed = true; }
   if (!Array.isArray(current.sessions)) { current.sessions = []; changed = true; }
-  const loginRoles = new Set(["SUPER_ADMIN", "OWNER", "ADMIN"]);
+  const loginRoles = new Set(["SUPER_ADMIN", "OWNER", "ADMIN", "EMPLOYEE"]);
   const loginUsers = current.users.filter((user) => (user.roles || []).some((role) => loginRoles.has(role)));
   if (loginUsers.length !== current.users.length) { current.users = loginUsers; changed = true; }
   PLATFORM_MODULE_KEYS.forEach((key) => {
     if (!current.platformSettings.modules[key]) { current.platformSettings.modules[key] = { enabled: true, plans: ["TRIAL", "FREE", "STANDARD", "PRO", "ENTERPRISE"] }; changed = true; }
   });
   current.companies = current.companies.map((company) => company.moduleOverrides ? company : { ...company, moduleOverrides: {} });
-  if (current.version !== 2) { current.version = 2; changed = true; }
+  if (current.version !== 3) { current.version = 3; changed = true; }
   if (changed) safeWrite(DIRECTORY_KEY, current);
   return current;
 }
@@ -201,11 +204,12 @@ function setSessionForUser(user) {
 
 export function loginWithPhone(phone, password) {
   const normalized = normalizePhone(phone);
+  const login = String(phone || "").trim().toLowerCase();
   const directory = ensureDirectory();
-  const user = directory.users.find((item) => normalizePhone(item.phone) === normalized);
+  const user = directory.users.find((item) => normalizePhone(item.phone) === normalized || String(item.login || "").trim().toLowerCase() === login);
 
   if (!user || user.password !== password) {
-    throw new Error("Telefon raqami yoki parol noto‘g‘ri.");
+    throw new Error("Login, telefon yoki parol noto‘g‘ri.");
   }
   if (user.status !== "ACTIVE") {
     throw new Error("Bu hisob faolsizlantirilgan. Qulay administratoriga murojaat qiling.");
@@ -213,8 +217,8 @@ export function loginWithPhone(phone, password) {
   if (directory.platformSettings?.maintenanceMode && !user.roles?.includes("SUPER_ADMIN")) {
     throw new Error("Qulayda texnik xizmat ketmoqda. Birozdan so‘ng qayta urinib ko‘ring.");
   }
-  if (!user.roles?.some((role) => ["OWNER", "ADMIN", "SUPER_ADMIN"].includes(role))) {
-    throw new Error("Qulayning ushbu versiyasida platformaga faqat Owner yoki Admin kiradi.");
+  if (!user.roles?.some((role) => ["OWNER", "ADMIN", "EMPLOYEE", "SUPER_ADMIN"].includes(role))) {
+    throw new Error("Bu hisobga platformaga kirish ruxsati berilmagan.");
   }
   if (user.companyId) {
     const company = directory.companies.find((item) => item.id === user.companyId);
@@ -228,6 +232,53 @@ export function loginWithPhone(phone, password) {
   writeDirectory(directory);
   const session = setSessionForUser({ ...user, lastLoginAt: loginAt });
   return { user: { ...user, lastLoginAt: loginAt }, session };
+}
+
+export async function loginWithPin(pin) {
+  const pinHash = await hashDevicePin(pin);
+  const directory = ensureDirectory();
+  const matches = directory.users.filter((item) => item.pinHash === pinHash && item.status === "ACTIVE");
+  if (matches.length !== 1) throw new Error("PIN noto‘g‘ri yoki xavfsiz aniqlanmadi.");
+  const user = matches[0];
+  if (!user.roles?.some((role) => ["OWNER", "ADMIN", "EMPLOYEE"].includes(role))) throw new Error("Bu hisobga platformaga kirish ruxsati berilmagan.");
+  return { user, session: setSessionForUser(user) };
+}
+
+const MODULE_PERMISSIONS = Object.freeze({
+  dashboard: ["dashboard.view"], sales: ["orders.view", "orders.create"], pos: ["orders.view", "orders.create"],
+  inventory: ["inventory.view", "inventory.receive", "inventory.transfer", "inventory.adjust", "products.view", "products.manage"], partners: ["customers.view", "customers.manage"], agents: ["dashboard.view", "orders.view"],
+  routes: ["dashboard.view", "orders.view"], fulfillment: ["fulfillment.view", "fulfillment.execute"], delivery: ["delivery.view", "delivery.execute"],
+  finance: ["finance.view", "payments.view", "payments.collect"], reports: ["reports.view", "reports.export"], settings: [],
+});
+
+export function createEmployeeAuthUser(payload) {
+  const directory = ensureDirectory();
+  const login = String(payload.login || "").trim().toLowerCase();
+  const phone = normalizePhone(payload.phone);
+  if (!login) throw new Error("Loginni kiriting.");
+  if (String(payload.password || "").length < 6) throw new Error("Parol kamida 6 belgidan iborat bo‘lsin.");
+  if (directory.users.some((item) => String(item.login || "").trim().toLowerCase() === login)) throw new Error("Bu login band.");
+  if (directory.users.some((item) => normalizePhone(item.phone) === phone)) throw new Error("Bu telefon bilan kirish hisobi mavjud.");
+  if (payload.pinHash && directory.users.some((item) => item.pinHash === payload.pinHash)) throw new Error("Bu PIN boshqa hisobda ishlatilgan.");
+  const moduleAccess = [...new Set((payload.moduleAccess || []).filter((key) => PLATFORM_MODULE_KEYS.includes(key)))];
+  const user = {
+    id: `auth-employee-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, companyId: payload.companyId,
+    employeeId: payload.employeeId, name: payload.name, title: payload.title, phone, login, password: payload.password,
+    pinHash: payload.pinHash || "", roles: ["EMPLOYEE"], primaryRole: "EMPLOYEE", moduleAccess,
+    permissions: [...new Set(moduleAccess.flatMap((key) => MODULE_PERMISSIONS[key] || []))], status: "ACTIVE", mustChangePassword: false, createdAt: now(),
+  };
+  directory.users.push(user);
+  writeDirectory(directory);
+  return user;
+}
+
+export function updateEmployeeAuthUser(employeeId, patch) {
+  const directory = ensureDirectory();
+  const user = directory.users.find((item) => item.employeeId === employeeId && item.roles?.includes("EMPLOYEE"));
+  if (!user) return null;
+  Object.assign(user, patch, { updatedAt: now() });
+  writeDirectory(directory);
+  return user;
 }
 
 export function logoutAuth() {
@@ -490,6 +541,10 @@ export function getHomePathForUser(user) {
   if (!user) return "/login";
   if (user.roles?.includes("SUPER_ADMIN")) return "/super-admin";
   if (user.roles?.some((role) => ["OWNER", "ADMIN"].includes(role))) return "/dashboard";
+  if (user.roles?.includes("EMPLOYEE")) {
+    const first = (user.moduleAccess || []).find((key) => PLATFORM_MODULE_KEYS.includes(key));
+    return { dashboard: "/dashboard", sales: "/orders", pos: "/sales/pos", inventory: "/inventory", partners: "/customers", agents: "/agents", routes: "/routes/today", fulfillment: "/fulfillment", delivery: "/deliveries", finance: "/finance", reports: "/reports", settings: "/settings/general" }[first] || "/forbidden";
+  }
   return "/login";
 }
 

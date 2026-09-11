@@ -14,10 +14,10 @@ function LoginPage() {
 
   if (auth.user) return <Navigate to={auth.user.mustChangePassword ? "/change-password" : getHomePathForUser(auth.user)} replace />;
 
-  const submit = async ({ phone, password }) => {
+  const submit = async ({ identifier, password, pin, mode }) => {
     setError(""); setLoading(true);
     try {
-      const { user } = auth.login(phone, password);
+      const { user } = mode === "pin" ? await auth.pinLogin(pin) : await auth.login(identifier, password);
       resetLocalDbCache();
       navigate(user.mustChangePassword ? "/change-password" : getHomePathForUser(user), { replace: true });
     } catch (err) {
@@ -26,7 +26,7 @@ function LoginPage() {
   };
 
   return <div className="qp-auth-card">
-    <div className="qp-auth-card-head"><span>Qulay hisobingiz</span><h2>Xush kelibsiz</h2><p>Telefon raqamingiz va parolingiz bilan tizimga kiring.</p></div>
+    <div className="qp-auth-card-head"><span>Qulay hisobingiz</span><h2>Xush kelibsiz</h2><p>Login va parol yoki xodim PIN-kodi bilan tizimga kiring.</p></div>
     <LoginForm onSubmit={submit} loading={loading} error={error} />
     <div className="qp-auth-demo"><strong>Sinov egasi:</strong>&nbsp; +998 90 111 11 11 &nbsp;•&nbsp; Qulay123!</div>
     <div className="qp-auth-footer">Yangi biznesmisiz? <Link to="/register">Kompaniya yaratish</Link></div>

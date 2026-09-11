@@ -9,6 +9,7 @@ import {
   getCompanyById,
   getCurrentAuthUser,
   loginWithPhone,
+  loginWithPin,
   logoutAuth,
   subscribeAuth,
 } from "../../services/authService";
@@ -40,6 +41,7 @@ function stableSnapshot() {
 export function AuthProvider({ children }) {
   const state = useSyncExternalStore(subscribeAuth, stableSnapshot, stableSnapshot);
   const login = useCallback((phone, password) => loginWithPhone(phone, password), []);
+  const pinLogin = useCallback((pin) => loginWithPin(pin), []);
   const logout = useCallback(() => logoutAuth(), []);
   const registerOwner = useCallback((payload) => createOwnerAccount(payload), []);
   const changePassword = useCallback((currentPassword, newPassword) => changeOwnPassword(currentPassword, newPassword), []);
@@ -50,10 +52,11 @@ export function AuthProvider({ children }) {
     isAuthenticated: Boolean(state.user),
     isSuperAdmin: Boolean(state.user?.roles?.includes("SUPER_ADMIN")),
     login,
+    pinLogin,
     logout,
     registerOwner,
     changePassword,
-  }), [state, login, logout, registerOwner, changePassword]);
+  }), [state, login, pinLogin, logout, registerOwner, changePassword]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

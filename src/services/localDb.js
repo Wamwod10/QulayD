@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import { AUTH_EVENT, DEFAULT_COMPANY_ID, getActiveCompanyId } from "./authService";
-import { generateUniqueEan13, generateUniqueSku } from "../utils/productCodes";
+import { generateUniqueSku } from "../utils/productCodes";
 
 const STORAGE_KEY_PREFIX = "qulay.prototype.db.v5.company";
 const LEGACY_STORAGE_KEYS = ["qulay.prototype.db.v4", "qulay.prototype.db.v3", "qulay.prototype.db.v2", "qulay.prototype.db.v1"];
@@ -15,9 +15,9 @@ const now = () => new Date().toISOString();
 const today = () => new Date().toISOString().slice(0, 10);
 
 const seedDb = () => ({
-  meta: { version: 5, seededAt: now() },
-  // Owner/Admin authentication lives only in authService. Business staff are
-  // resource records here and never receive a platform login/workspace.
+  meta: { version: 6, seededAt: now() },
+  // Authentication credentials live only in authService. These are business
+  // resource records linked to employee auth identities by employeeId.
   users: [
     { id: "emp-manager-demo", name: "Dilshod Rahimov", title: "Savdo menejeri", phone: "+998903333333", roles: ["SALES_MANAGER"], role: "SALES_MANAGER", branch: "Bosh filial", territory: "Chilonzor", image: "", status: "ACTIVE" },
     { id: "emp-agent-demo", name: "Javohir Karimov", title: "Savdo agenti", phone: "+998902222222", roles: ["SALES_AGENT"], role: "SALES_AGENT", branch: "Bosh filial", territory: "Chilonzor / Yunusobod", image: "", status: "ACTIVE" },
@@ -46,8 +46,8 @@ const seedDb = () => ({
     { id: "unit-liter", name: "Litr", shortName: "l" },
   ],
   priceLists: [
-    { id: "pl-retail", name: "Chakana", status: "ACTIVE" },
-    { id: "pl-wholesale", name: "Ulgurji", status: "ACTIVE" },
+    { id: "pl-retail", name: "Sotuv narxi", status: "ACTIVE" },
+    { id: "pl-wholesale", name: "Tannarx", status: "ACTIVE" },
     { id: "pl-vip", name: "VIP", status: "ACTIVE" },
   ],
   products: [
@@ -146,6 +146,11 @@ const seedDb = () => ({
   payments: [
     { id: "pay-1", number: "PAY-2026-0001", date: today(), customerId: "cus-3", amount: 378000, method: "CASH", status: "CONFIRMED", invoiceId: "inv-1" },
   ],
+  paymentMethods: [
+    { id: "pm-cash", code: "CASH", name: "Naqd", shortcut: "F1", commissionType: "NONE", status: "ACTIVE" },
+    { id: "pm-card", code: "CARD", name: "Bank", shortcut: "F2", commissionType: "PERCENT", status: "ACTIVE" },
+    { id: "pm-qr", code: "QR", name: "QR", shortcut: "F3", commissionType: "NONE", status: "ACTIVE" },
+  ],
   ledger: [
     { id: "led-1", date: today(), customerId: "cus-3", type: "INVOICE", debit: 378000, credit: 0, reference: "INV-2026-0001" },
     { id: "led-2", date: today(), customerId: "cus-3", type: "PAYMENT", debit: 0, credit: 378000, reference: "PAY-2026-0001" },
@@ -192,9 +197,9 @@ const seedDb = () => ({
       showTableSummary: true,
     },
     company: { name: "Qulay namunaviy kompaniya", logo: "", currency: "UZS", language: "uz", timezone: "Asia/Tashkent", branch: "Bosh filial", defaultWarehouseId: "wh-main" },
-    modules: { sales: true, pos: true, catalog: true, inventory: true, partners: true, agents: true, routes: true, fulfillment: true, delivery: true, finance: true, reports: true },
+    modules: { sales: true, pos: true, inventory: true, partners: true, agents: true, routes: true, fulfillment: true, delivery: true, finance: true, reports: true },
     sales: { autoConfirmOrders: true, allowNegativeStock: false, maxAgentDiscount: 5, requireOwnerApprovalForAdminOrders: false, allowOrderEdit: true, showStockOnOrder: true, warnCustomerDebt: true },
-    pos: { warehouseId: "wh-main", priceListId: "pl-retail", allowAnonymousCustomer: true, showImages: true, printReceipt: false, barcodeAutoAdd: true, clearCartAfterSale: true, showStockBadge: true, allowHeldCarts: true },
+    pos: { warehouseId: "wh-main", priceListId: "pl-retail", productView: "card", allowAnonymousCustomer: true, showImages: true, printReceipt: false, barcodeAutoAdd: true, clearCartAfterSale: true, showStockBadge: true, allowHeldCarts: true },
     inventory: { allowNegativeStock: false, reservations: true, lowStockAlerts: true, requireTransferApproval: false, requireAdjustmentApproval: true },
     agents: { requireGpsCheckIn: false, requireGpsCheckOut: false, allowOutsideRoute: true, allowCreateCustomer: true, allowCollectPayment: true, showDailyProgress: true },
     delivery: { allowPartialDelivery: true, requireFailureReason: true, requireRecipientName: true, requirePhoto: false, requireGps: false, showDriverWorkload: true },
@@ -236,14 +241,13 @@ function normalizeDb(value) {
     if (!appearance.surfaceColor) appearance.surfaceColor = "#ffffff";
   }
 
-  // Owner-only prototype: authentication accounts live in authService only.
-  // Older LocalStorage snapshots may still contain Owner/employee auth records;
-  // convert them into resource-only employees without creating duplicate identities.
+  // Authentication accounts live in authService only. Older LocalStorage
+  // snapshots may still contain auth-shaped records; keep only employee resources.
   const loginRoles = new Set(["OWNER", "ADMIN", "SUPER_ADMIN"]);
   merged.users = (merged.users || [])
     .filter((employee) => {
       const roles = Array.isArray(employee.roles) ? employee.roles : [employee.role].filter(Boolean);
-      return !roles.some((role) => loginRoles.has(role));
+      return !roles.some((role) => loginRoles.has(role)) || roles.includes("EMPLOYEE");
     })
     .map((employee) => {
       const resource = { ...employee };
@@ -324,8 +328,7 @@ function normalizeDb(value) {
     if (!normalized.sku) normalized.sku = generateUniqueSku([...productsSoFar, ...merged.products], normalized.id);
     const rawBarcodes = Array.isArray(normalized.barcodes) ? normalized.barcodes : [normalized.barcode];
     normalized.barcodes = Array.from(new Set(rawBarcodes.map((value) => String(value || "").trim()).filter(Boolean)));
-    if (!normalized.barcodes.length) normalized.barcodes = [generateUniqueEan13([...productsSoFar, ...merged.products], normalized.id)];
-    normalized.barcode = normalized.barcodes[0];
+    normalized.barcode = normalized.barcodes[0] || "";
     normalized.image = String(normalized.image || "");
     if (!Number.isFinite(Number(normalized.costPrice))) {
       const receiptItems = (merged.goodsReceipts || [])
@@ -340,6 +343,14 @@ function normalizeDb(value) {
   });
 
   merged.employeeTypes = (merged.employeeTypes || defaults.employeeTypes).map((type) => ({ ...type, status: type.status || "ACTIVE" }));
+  merged.units = (merged.units || defaults.units).map((unit) => ({ type: "COUNT", precision: 0, status: "ACTIVE", ...unit }));
+  merged.paymentMethods = (merged.paymentMethods || defaults.paymentMethods).map((method) => ({ ...method, status: method.status || "ACTIVE" }));
+  merged.priceLists = (merged.priceLists || defaults.priceLists).map((list) => {
+    if (list.id === "pl-retail" && /^chakana$/i.test(String(list.name || "").trim())) return { ...list, name: "Sotuv narxi" };
+    if (list.id === "pl-wholesale" && /^ulgurji$/i.test(String(list.name || "").trim())) return { ...list, name: "Tannarx" };
+    return list;
+  });
+  if (merged.settings?.modules) delete merged.settings.modules.catalog;
   merged.customers = (merged.customers || []).map((customer) => ({ customerType: "ORGANIZATION", taxId: "", category: "", image: "", ...customer }));
   merged.suppliers = (merged.suppliers || []).map((supplier) => ({ image: "", ...supplier }));
 
@@ -353,7 +364,7 @@ function normalizeDb(value) {
   }
 
   // POS always needs a real active warehouse. Older demos used a partial "wh-pos"
-  // stock that made half of the catalog look unavailable.
+  // stock that made many products look unavailable.
   const activeWarehouses = (merged.warehouses || []).filter((warehouse) => warehouse.status === "ACTIVE");
   const configuredPosId = merged.settings?.pos?.warehouseId;
   const defaultWarehouseId = merged.settings?.company?.defaultWarehouseId;
@@ -369,7 +380,7 @@ function normalizeDb(value) {
     reserved: Math.max(0, Number(balance.reserved || 0)),
   }));
   merged.approvals = merged.approvals || [];
-  // Employee self-service workspaces/tasks were removed from the Owner-only product.
+  // Employee resources remain in the shared platform data; no separate workspace is created.
   delete merged.workSessions;
   delete merged.employeeTasks;
   if (merged.settings?.workforce) {
@@ -378,7 +389,7 @@ function normalizeDb(value) {
   }
   merged.workflowNotifications = merged.workflowNotifications || [];
   merged.activityLog = merged.activityLog || [];
-  merged.meta = { ...merged.meta, version: 5, lastOpenedAt: now() };
+  merged.meta = { ...merged.meta, version: 6, lastOpenedAt: now() };
   return merged;
 }
 
@@ -552,7 +563,7 @@ export function initializeCompanyDb({ company }) {
   for (const key of Object.keys(db)) {
     if (Array.isArray(db[key]) && !keep.includes(key)) db[key] = [];
   }
-  db.meta = { version: 5, seededAt: now(), companyId: company.id };
+  db.meta = { version: 6, seededAt: now(), companyId: company.id };
   db.users = [];
   db.warehouses = [{ id: "wh-main", name: "Asosiy ombor", branch: "Bosh filial", address: "", latitude: null, longitude: null, status: "ACTIVE" }];
   db.settings.company = { ...db.settings.company, name: company.name, branch: "Bosh filial", defaultWarehouseId: "wh-main" };

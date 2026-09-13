@@ -26,19 +26,19 @@ function InventoryTransfersPage() {
     product: getName(db.products, item.productId),
   }));
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     if (!form.productId || Number(form.quantity) <= 0 || form.fromWarehouseId === form.toWarehouseId) {
       notify("Omborlar, mahsulot va miqdorni to‘g‘ri kiriting", "warning");
       return;
     }
-    const result = createTransfer(form);
+    const result = await createTransfer(form);
     notify(result.message, result.ok ? "success" : "danger");
     if (result.ok) setOpen(false);
   };
 
-  const approve = (id) => {
-    const result = approveTransfer(id);
+  const approve = async (id) => {
+    const result = await approveTransfer(id);
     notify(result.message, result.ok ? "success" : "danger");
   };
 

@@ -32,14 +32,13 @@ function CustomersPage() {
   }, [searchParams, setSearchParams]);
 
   const rows = db.customers.map((item) => ({ ...item, agent: getName(db.agents, item.agentId, "Biriktirilmagan"), priceList: getName(db.priceLists, item.priceListId) }));
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     if (!form.name.trim()) { notify("Mijoz nomini kiriting", "warning"); return; }
     if (form.phone.trim() && db.customers.some((customer) => customer.phone === form.phone.trim())) { notify("Bu telefon raqamli mijoz mavjud", "warning"); return; }
-    createCustomer(form);
-    notify("Mijoz qo‘shildi");
-    setOpen(false);
-    setForm(emptyForm);
+    const result = await createCustomer(form);
+    notify(result.message, result.ok ? "success" : "danger");
+    if (result.ok) { setOpen(false); setForm(emptyForm); }
   };
 
   const phoneDigits = (value) => String(value || "").replace(/\D/g, "");

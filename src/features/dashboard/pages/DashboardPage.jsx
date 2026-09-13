@@ -39,16 +39,17 @@ function DashboardPage() {
   const confirmedOrders = db.orders.filter((item) => item.status === "CONFIRMED").length;
   const pickingOrders = db.orders.filter((item) => ["RESERVED", "PICKING", "PICKED", "PACKING", "PARTIAL"].includes(item.fulfillmentStatus)).length;
   const soldUnits = todaySales.reduce((sum, sale) => sum + (sale.items || []).reduce((inner, item) => inner + Number(item.quantity || 0), 0), 0);
-  const todaySalesTotal = todaySales.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  const todaySalesTotal = Number(db.dashboard?.todaySales ?? todaySales.reduce((sum, item) => sum + Number(item.total || 0), 0));
   const todayPaymentTotal = todayPayments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const finance = getFinanceSummary(db);
-  const totalDebt = finance.totalDebt;
+  const totalDebt = Number(db.dashboard?.receivables ?? finance.totalDebt);
   const reservedUnits = db.balances.reduce((sum, item) => sum + Number(item.reserved || 0), 0);
-  const activeCustomers = db.customers.filter((item) => item.status === "ACTIVE").length;
-  const lowStock = db.balances.filter((balance) => {
+  const activeCustomers = Number(db.dashboard?.customers ?? db.customers.filter((item) => item.status === "ACTIVE").length);
+  const lowStockCalculated = db.balances.filter((balance) => {
     const product = db.products.find((item) => item.id === balance.productId);
     return product && balance.onHand - balance.reserved <= Number(product.minStock || 0);
   }).length;
+  const lowStock = Number(db.dashboard?.lowStock ?? lowStockCalculated);
   const debtCustomers = finance.debtorCount;
   const operationalAgents = getOperationalAgents(db);
   const agentBehind = operationalAgents.filter((agent) => Number(agent.visitsToday || 0) < Number(agent.plannedVisitsToday || agent.visitsToday || 0)).length;
@@ -88,7 +89,7 @@ function DashboardPage() {
       <div className="qp-metrics qp-dashboard-metrics">
         {isEnabled("sales") ? <Metric label="Bugungi savdo" value={formatMoney(todaySalesTotal)} hint={`${todaySales.length} ta haqiqiy sotuv`} icon={<WalletCards size={16} />} /> : null}
         {isEnabled("finance") ? <Metric label="Tushum" value={formatMoney(todayPaymentTotal)} hint={`${todayPayments.length} ta tasdiqlangan to‘lov`} icon={<CircleDollarSign size={16} />} /> : null}
-        {isEnabled("sales") ? <Metric label="Bugungi buyurtmalar" value={todayOrders.length} hint={`${confirmedOrders} ta tasdiqlangan`} icon={<ShoppingBag size={16} />} /> : null}
+        {isEnabled("sales") ? <Metric label="Bugungi buyurtmalar" value={db.dashboard?.todayOrders ?? todayOrders.length} hint={`${confirmedOrders} ta tasdiqlangan`} icon={<ShoppingBag size={16} />} /> : null}
         {isEnabled("finance") ? <Metric label="Umumiy qarzdorlik" value={formatMoney(totalDebt)} hint={`${debtCustomers} ta mijoz`} icon={<CircleDollarSign size={16} />} /> : null}
         {isEnabled("delivery") ? <Metric label="Yetkazilmoqda" value={activeDelivery} hint={`${deliveredToday} ta yakunlangan`} icon={<Truck size={16} />} /> : null}
         {canConfigure ? <Metric label="Muammolar" value={issueCount} hint="Tezkor e’tibor talab qiladi" icon={<AlertTriangle size={16} />} /> : null}

@@ -225,11 +225,14 @@ export function getRoutePermission(pathname = "") {
   if (path === "deliveries/planning") return PERMISSIONS.DELIVERY_PLAN;
   if (path.startsWith("deliver") || path === "delivery-trips") return PERMISSIONS.DELIVERY_VIEW;
   if (path.startsWith("fulfillment")) return PERMISSIONS.FULFILLMENT_VIEW;
+  if (path.startsWith("agents") || path === "visits") return PERMISSIONS.AGENTS_VIEW;
+  if (path.startsWith("routes")) return PERMISSIONS.ROUTES_VIEW;
   if (path === "inventory/receipts") return PERMISSIONS.INVENTORY_RECEIVE;
   if (path === "inventory/transfers") return PERMISSIONS.INVENTORY_TRANSFER;
   if (path === "inventory/adjustments") return PERMISSIONS.INVENTORY_ADJUST;
   if (path.startsWith("inventory") || path === "warehouses" || path === "catalog" || ["products", "categories", "pricing"].includes(path) || path.startsWith("catalog/")) return path === "catalog" || path.includes("products") || path.includes("categories") || path.includes("pricing") ? PERMISSIONS.PRODUCTS_VIEW : PERMISSIONS.INVENTORY_VIEW;
-  if (path === "orders/new" || path === "sales/pos") return PERMISSIONS.ORDERS_CREATE;
+  if (path === "sales/pos") return PERMISSIONS.POS_CREATE;
+  if (path === "orders/new") return PERMISSIONS.ORDERS_CREATE;
   if (["orders", "sales", "returns"].includes(path)) return PERMISSIONS.ORDERS_VIEW;
   if (["customers", "suppliers", "partners/contacts"].includes(path)) return PERMISSIONS.CUSTOMERS_VIEW;
   return PERMISSIONS.DASHBOARD_VIEW;

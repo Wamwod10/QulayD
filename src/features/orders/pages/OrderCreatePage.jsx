@@ -36,7 +36,7 @@ function OrderCreatePage() {
   const selectedCustomer = db.customers.find((item) => item.id === customerId);
   const insufficient = normalized.some((item) => item.productId && Number(item.quantity) > item.available && !db.settings.inventory.allowNegativeStock);
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     if (!customerId || !warehouseId || !normalized.some((item) => item.productId)) {
       notify("Mijoz, ombor va kamida bitta mahsulotni tanlang", "warning");
@@ -46,7 +46,7 @@ function OrderCreatePage() {
       notify("Har bir mahsulot uchun miqdor 0 dan katta bo‘lsin", "warning");
       return;
     }
-    const result = createOrder({ customerId, agentId, warehouseId, items: normalized, discountPercent });
+    const result = await createOrder({ customerId, agentId, warehouseId, items: normalized, discountPercent });
     notify(result.message, result.ok ? "success" : "danger");
     if (result.ok) navigate("/orders");
   };

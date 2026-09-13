@@ -1,7 +1,7 @@
 import ImageUploader from "../../../components/ui/ImageUploader";
 import Select from "../../../components/ui/Select";
 import { getLanguageLabel } from "../../../i18n";
-import { Download, Plus, RotateCcw, ShieldCheck, Smartphone, Upload, Wifi, WifiOff } from "lucide-react";
+import { Download, Plus, RotateCcw, ShieldCheck, Smartphone, Wifi, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
@@ -13,11 +13,7 @@ import {
   SectionCard,
 } from "../../../components/prototype/PrototypeUI";
 import {
-  createLocalBackup,
   exportLocalDb,
-  importLocalDb,
-  resetLocalDb,
-  restoreLocalBackup,
   updateLocalDb,
   useLocalDb,
 } from "../../../services/localDb";
@@ -25,6 +21,7 @@ import { notify } from "../../../services/notify";
 import { formatDateTime } from "../../../utils/formatters";
 import { clearDeviceUnlock, hashDevicePin, markDeviceUnlocked } from "../../../utils/deviceSecurity";
 import { isStandaloneMode } from "../../../utils/pwa";
+import { apiRequest } from "../../../services/authService";
 
 const nav = [
   ["general", "Umumiy"],
@@ -335,13 +332,13 @@ function PosSettings({ db }) {
 function PaymentMethodsSettings({ db }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", shortcut: "", commissionType: "NONE" });
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     const name = form.name.trim();
     if (!name) { notify("To‘lov usuli nomini kiriting", "warning"); return; }
     if ((db.paymentMethods || []).some((item) => item.name.toLowerCase() === name.toLowerCase())) { notify("Bu nomdagi to‘lov usuli mavjud", "warning"); return; }
-    updateLocalDb((draft) => { draft.paymentMethods.push({ id: `pm-${Date.now().toString(36)}`, code: `CUSTOM_${Date.now().toString(36).toUpperCase()}`, ...form, name, status: "ACTIVE" }); });
-    setForm({ name: "", shortcut: "", commissionType: "NONE" }); setOpen(false); notify("To‘lov usuli yaratildi");
+    try { await apiRequest({ url: "/pos/payment-methods", body: { code: `CUSTOM_${Date.now().toString(36).toUpperCase()}`, name, method: "OTHER", shortcut: form.shortcut || undefined, status: "ACTIVE", metadata: { commissionType: form.commissionType } } }); setForm({ name: "", shortcut: "", commissionType: "NONE" }); setOpen(false); notify("To‘lov usuli yaratildi"); }
+    catch (error) { notify(error.message, "danger"); }
   };
   return <>
     <SectionCard title="To‘lov usullari" description="Bu yagona ro‘yxat POS, moliya, to‘lov tarixi, chek va hisobotlarda ishlatiladi.">
@@ -526,26 +523,10 @@ function DataSettings() {
     notify("Ma’lumotlar fayli tayyorlandi");
   };
 
-  const importFile = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      importLocalDb(await file.text());
-      notify("Ma’lumotlar muvaffaqiyatli yuklandi");
-      event.target.value = "";
-    } catch (error) {
-      notify(error.message || "Faylni yuklab bo‘lmadi", "danger");
-    }
-  };
-
   return (
-    <SectionCard title="Ma’lumotlar" description="Mahalliy prototip ma’lumotlarini xavfsiz zaxiralash va tiklash.">
+    <SectionCard title="Ma’lumotlar" description="Backenddan yuklangan joriy ma’lumotlarning o‘qish uchun JSON nusxasi.">
       <div className="qp-settings-panel">
         <SettingRow title="Zaxira faylini yuklab olish" description="Barcha joriy ma’lumotlarni JSON faylga saqlaydi"><SecondaryButton onClick={download}><Download size={15} /> Yuklab olish</SecondaryButton></SettingRow>
-        <SettingRow title="Zaxira faylidan tiklash" description="Tanlangan Qulay ma’lumotlar faylini yuklaydi"><label className="qp-button qp-button-secondary"><Upload size={15} /> Fayl tanlash<input type="file" accept="application/json,.json" hidden onChange={importFile} /></label></SettingRow>
-        <SettingRow title="Ichki zaxira yaratish" description="Joriy holatni brauzer ichida alohida saqlaydi"><SecondaryButton onClick={() => { createLocalBackup(); notify("Ichki zaxira yaratildi"); }}>Zaxira yaratish</SecondaryButton></SettingRow>
-        <SettingRow title="Ichki zaxirani tiklash" description="Oldin yaratilgan brauzer zaxirasiga qaytadi"><SecondaryButton onClick={() => { const value = restoreLocalBackup(); notify(value ? "Zaxira tiklandi" : "Saqlangan zaxira topilmadi", value ? "success" : "warning"); }}><RotateCcw size={15} /> Tiklash</SecondaryButton></SettingRow>
-        <SettingRow title="Boshlang‘ich holatga qaytarish" description="Barcha kiritilgan o‘zgarishlar o‘chiriladi; avval avtomatik zaxira olinadi"><button type="button" className="qp-button qp-button-danger" onClick={() => { if (window.confirm("Barcha mahalliy ma’lumotlar boshlang‘ich holatga qaytarilsinmi?")) { createLocalBackup(); resetLocalDb(); notify("Boshlang‘ich ma’lumotlar tiklandi", "warning"); } }}>Tozalash va tiklash</button></SettingRow>
       </div>
     </SectionCard>
   );
@@ -558,7 +539,7 @@ function SystemSettings({ db }) {
       <SectionCard title="Tizim holati">
         <div className="qp-settings-panel">
           <SettingRow title="Ma’lumotlar versiyasi" description="Mahalliy ma’lumotlar tuzilmasi"><strong>v{db.meta?.version || 3}</strong></SettingRow>
-          <SettingRow title="Saqlash usuli" description="Joriy prototip xotirasi"><strong>Brauzerning mahalliy xotirasi</strong></SettingRow>
+          <SettingRow title="Saqlash usuli" description="Business source-of-truth"><strong>Backend API · PostgreSQL</strong></SettingRow>
           <SettingRow title="Ma’lumot hajmi" description="Joriy ma’lumotlar holatining taxminiy hajmi"><strong>{Math.max(1, Math.round(bytes / 1024))} KB</strong></SettingRow>
           <SettingRow title="Oxirgi ochilgan vaqt" description="Joriy ma’lumotlar holati"><strong>{db.meta?.lastOpenedAt ? formatDateTime(db.meta.lastOpenedAt) : "—"}</strong></SettingRow>
         </div>

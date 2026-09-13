@@ -5,7 +5,8 @@ import CameraScannerModal from "../../../components/mobile/CameraScannerModal";
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import { Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
 import Select from "../../../components/ui/Select";
-import { makeId, nextNumber, updateLocalDb, useLocalDb } from "../../../services/localDb";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 import { getName, shortDate } from "../../../utils/formatters";
 import { findProductByScan, getProductBarcodes } from "../../../utils/productCodes";
@@ -104,60 +105,21 @@ function InventoryCountsPage() {
   const progress = items.length ? Math.round((countedCount / items.length) * 100) : 0;
   const differences = items.filter((item) => item.countedQty !== "" && Number(item.countedQty) !== Number(item.systemQty)).length;
 
-  const saveDraft = () => {
-    const date = new Date().toISOString().slice(0, 10);
-    updateLocalDb((draft) => {
-      const existing = countId ? draft.inventoryCounts.find((entry) => entry.id === countId) : null;
-      if (existing) {
-        Object.assign(existing, { warehouseId, date, status: "COUNTING", differences, items: structuredClone(items) });
-      } else {
-        const created = {
-          id: makeId("cnt"),
-          number: nextNumber("CNT", draft.inventoryCounts),
-          date,
-          warehouseId,
-          status: "COUNTING",
-          differences,
-          items: structuredClone(items),
-          createdBy: "Ega",
-        };
-        draft.inventoryCounts.unshift(created);
-        setCountId(created.id);
-      }
-    });
-    notify("Inventarizatsiya qoralamasi saqlandi");
+  const saveDraft = async () => {
+    if (countId) { notify("Inventarizatsiya qoralamasi avval saqlangan", "info"); return countId; }
+    try { const created = await apiRequest({ url: "/inventory/counts", body: { warehouseId, items: items.map((line) => ({ productId: line.productId, counted: Number(line.countedQty || line.systemQty || 0) })) } }); setCountId(created.id); notify("Inventarizatsiya qoralamasi saqlandi"); return created.id; }
+    catch (error) { notify(error.message, "danger"); return null; }
   };
 
-  const finalize = () => {
+  const finalize = async () => {
     if (!warehouseId) { notify("Omborni tanlang", "warning"); return; }
     if (countedCount !== items.length) {
       notify(`Yakunlash uchun barcha mahsulotlarni sanang. Qoldi: ${items.length - countedCount}`, "warning");
       return;
     }
-    const date = new Date().toISOString().slice(0, 10);
-    updateLocalDb((draft) => {
-      let count = countId ? draft.inventoryCounts.find((entry) => entry.id === countId) : null;
-      if (!count) {
-        count = { id: makeId("cnt"), number: nextNumber("CNT", draft.inventoryCounts) };
-        draft.inventoryCounts.unshift(count);
-      }
-      Object.assign(count, { date, warehouseId, status: "COMPLETED", differences, items: structuredClone(items), completedAt: new Date().toISOString(), createdBy: count.createdBy || "Ega" });
-
-      items.forEach((line) => {
-        const countedQty = Number(line.countedQty);
-        const difference = countedQty - Number(line.systemQty || 0);
-        if (!difference) return;
-        let balance = draft.balances.find((entry) => entry.warehouseId === warehouseId && entry.productId === line.productId);
-        if (!balance) {
-          balance = { id: makeId("bal"), warehouseId, productId: line.productId, onHand: 0, reserved: 0 };
-          draft.balances.push(balance);
-        }
-        balance.onHand = countedQty;
-        draft.movements.unshift({
-          id: makeId("mov"), date, type: "INVENTORY_COUNT", warehouseId, productId: line.productId, quantity: difference, reference: count.number,
-        });
-      });
-    });
+    const id = countId || await saveDraft(); if (!id) return;
+    try { await apiRequest({ url: `/inventory/counts/${id}/complete`, body: {} }); }
+    catch (error) { notify(error.message, "danger"); return; }
     notify("Inventarizatsiya yakunlandi va qoldiqlar yangilandi");
     setOpen(false);
     setCountId(null);

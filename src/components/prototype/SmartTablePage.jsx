@@ -36,7 +36,8 @@ function SmartTablePage({
   extraSummary = [],
   bulkActions = null,
 }) {
-  const showSummary = useLocalDb((db) => db.settings.appearance.showTableSummary !== false);
+  const uiState = useLocalDb((db) => ({ showSummary: db.settings.appearance.showTableSummary !== false, meta: db.meta }));
+  const showSummary = uiState.showSummary;
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState({ key: "", direction: "asc" });
   const [page, setPage] = useState(1);
@@ -166,6 +167,8 @@ function SmartTablePage({
 
   return (
     <PageShell title={title} description={description} eyebrow={eyebrow} actions={actions}>
+      {uiState.meta?.loading ? <div className="qp-empty" role="status"><strong>Ma’lumotlar yuklanmoqda...</strong><span>Backend bilan xavfsiz aloqa o‘rnatilmoqda.</span></div> : null}
+      {uiState.meta?.apiError ? <div className="qp-empty" role="alert"><strong>Ma’lumotlarni olib bo‘lmadi</strong><span>{uiState.meta.apiError.data?.message || uiState.meta.apiError.message || "Tarmoq yoki server xatosi"}</span>{uiState.meta.retry ? <SecondaryButton onClick={uiState.meta.retry}>Qayta urinish</SecondaryButton> : null}</div> : null}
       {showSummary ? (
         <SummaryGrid className="qp-table-summary">
           {summaryItems.map((item) => (

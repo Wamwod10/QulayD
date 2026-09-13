@@ -61,6 +61,9 @@ function LoginForm({ onSubmit, loading = false, error = "" }) {
         </Field>
         <PrimaryButton className="qp-auth-submit" type="submit" disabled={loading}><LogIn size={17} /> {loading ? "Kirilmoqda..." : "Kirish"}</PrimaryButton>
       </> : <>
+        <Field label="Login yoki telefon">
+          <input className="qp-input" autoComplete="username" placeholder="Login yoki +998 90 123 45 67" value={form.identifier} onChange={(event) => setForm({ ...form, identifier: event.target.value })} required />
+        </Field>
         <PinKeypad value={form.pin} onChange={(pin) => { lastSubmittedPin.current = ""; setForm({ ...form, pin }); }} disabled={loading} error={error} lockSeconds={lockSeconds} />
         <div className="qp-auth-pin-hint">6-raqam kiritilganda avtomatik tekshiriladi</div>
       </>}

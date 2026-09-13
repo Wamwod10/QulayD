@@ -17,7 +17,7 @@ function MobileBottomNav({ onOpenMenu }) {
   const candidates = [
     { key: "home", label: "Bosh", to: "/dashboard", icon: Home, visible: isEnabled("dashboard") && can(PERMISSIONS.DASHBOARD_VIEW) },
     { key: "orders", label: "Buyurtma", to: "/orders", icon: ShoppingBag, visible: isEnabled("sales") && can(PERMISSIONS.ORDERS_VIEW) },
-    { key: "pos", label: "Kassa", to: "/sales/pos", icon: ScanLine, visible: isEnabled("pos") && can(PERMISSIONS.ORDERS_CREATE), action: "pos" },
+    { key: "pos", label: "Kassa", to: "/sales/pos", icon: ScanLine, visible: isEnabled("pos") && can(PERMISSIONS.POS_CREATE), action: "pos" },
     { key: "inventory", label: "Ombor", to: "/inventory", icon: Warehouse, visible: isEnabled("inventory") && can(PERMISSIONS.INVENTORY_VIEW) },
     { key: "reports", label: "Hisobot", to: "/reports", icon: BarChart3, visible: isEnabled("reports") && can(PERMISSIONS.REPORTS_VIEW) },
     { key: "finance", label: "Moliya", to: "/finance", icon: CircleDollarSign, visible: isEnabled("finance") && can(PERMISSIONS.FINANCE_VIEW) },

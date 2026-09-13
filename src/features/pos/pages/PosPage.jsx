@@ -7,7 +7,8 @@ import MobilePinGate from "../../../components/mobile/MobilePinGate";
 import { Field, Modal, PrimaryButton, SecondaryButton } from "../../../components/prototype/PrototypeUI";
 import Select from "../../../components/ui/Select";
 import { useAuth } from "../../../hooks/useAuth";
-import { makeId, updateLocalDb, useLocalDb } from "../../../services/localDb";
+import { updateLocalDb, useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 import { completePosSale } from "../../../services/prototypeActions";
 import { formatDateTime, formatMoney, getName } from "../../../utils/formatters";
@@ -222,7 +223,7 @@ function PosPage() {
       : [...current, productId]);
   };
 
-  const createCategory = (event) => {
+  const createCategory = async (event) => {
     event.preventDefault();
     const name = categoryName.trim();
     if (!name) { notify("Kategoriya nomini kiriting", "warning"); return; }
@@ -230,15 +231,8 @@ function PosPage() {
       notify("Bu nomdagi kategoriya allaqachon mavjud", "warning");
       return;
     }
-    const categoryIdToCreate = makeId("cat");
-    const selectedIds = new Set(categoryProductIds);
-    updateLocalDb((draft) => {
-      draft.categories = [{ id: categoryIdToCreate, name, status: "ACTIVE" }, ...draft.categories];
-      draft.products = draft.products.map((product) => selectedIds.has(product.id) ? { ...product, categoryId: categoryIdToCreate } : product);
-    });
-    setCategoryId(categoryIdToCreate);
-    setCategoryOpen(false);
-    notify(`${name} kategoriyasi yaratildi`);
+    try { const category = await apiRequest({ url: "/catalog/categories", body: { name, status: "ACTIVE" } }); await Promise.all(categoryProductIds.map((id) => apiRequest({ url: `/catalog/products/${id}`, method: "PATCH", body: { categoryId: category.id } }))); setCategoryId(category.id); setCategoryOpen(false); notify(`${name} kategoriyasi yaratildi`); }
+    catch (error) { notify(error.message, "danger"); }
   };
 
   const changeProductView = (view) => updateLocalDb((draft) => {
@@ -256,7 +250,7 @@ function PosPage() {
     return Array.from(new Set([total, ...standard.filter((value) => value >= total)])).slice(0, 4);
   }, [total]);
 
-  const checkout = () => {
+  const checkout = async () => {
     if (!warehouseId) {
       notify("Kassa uchun faol ombor topilmadi", "warning");
       return;
@@ -271,7 +265,7 @@ function PosPage() {
     }
 
     const cartSnapshot = cart.map((item) => ({ ...item }));
-    const result = completePosSale({ cart: cartSnapshot, customerId, warehouseId, paymentMethod });
+    const result = await completePosSale({ cart: cartSnapshot, customerId, warehouseId, paymentMethod });
     notify(result.message, result.ok ? "success" : "danger");
 
     if (result.ok && db.settings.pos.printReceipt === true) {
@@ -301,20 +295,21 @@ function PosPage() {
     }
   };
 
-  const holdCart = () => {
+  const holdCart = async () => {
     if (!cart.length || db.settings.pos.allowHeldCarts === false) return;
-    updateLocalDb((draft) => { draft.heldCarts.unshift({ id: makeId("cart"), createdAt: new Date().toISOString(), customerId, warehouseId, paymentMethod, cart }); });
+    try { await apiRequest({ url: "/pos/held-carts", body: { customerId: customerId || null, name: "Saqlangan savat", items: cart.map((item) => ({ productId: item.productId, quantity: Number(item.quantity), unitPrice: Number(item.price), discount: Number(item.discount || 0) })) } }); }
+    catch (error) { notify(error.message, "danger"); return; }
     setCart([]);
     setCustomerId("");
     setCashReceived("");
     notify("Savat vaqtincha saqlandi");
   };
 
-  const restoreCart = (held) => {
-    setCart(held.cart || []);
+  const restoreCart = async (held) => {
+    setCart((held.items || held.cart || []).map((item) => ({ ...item, price: Number(item.unitPrice ?? item.price), name: item.product?.name || item.name })));
     setCustomerId(held.customerId || "");
     setPaymentMethod(held.paymentMethod || "CASH");
-    updateLocalDb((draft) => { draft.heldCarts = draft.heldCarts.filter((item) => item.id !== held.id); });
+    try { await apiRequest({ url: `/pos/held-carts/${held.id}`, method: "DELETE" }); } catch (error) { notify(error.message, "danger"); return; }
     setShowHeld(false);
     notify("Saqlangan savat tiklandi");
   };

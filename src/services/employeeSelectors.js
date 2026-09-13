@@ -9,7 +9,7 @@ export function getOperationalAgents(db, { includeInactive = false } = {}) {
 export function getOperationalEmployees(db, role = null) {
   return (db?.users || []).filter((employee) => {
     if (!employee || employee.status !== "ACTIVE") return false;
-    if (["OWNER", "ADMIN", "SUPER_ADMIN"].includes(employee.role)) return false;
+    if (["OWNER", "ADMIN"].includes(employee.role)) return false;
     if (!role) return true;
     return (employee.roles || [employee.role].filter(Boolean)).includes(role);
   });

@@ -6,9 +6,9 @@ import YandexMap from "../../../components/maps/YandexMap";
 import { Field, PageShell, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
 import Checkbox from "../../../components/ui/Checkbox";
 import Select from "../../../components/ui/Select";
-import { makeId, nextNumber, updateLocalDb, useLocalDb } from "../../../services/localDb";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
-import { addActivity } from "../../../services/workflowHelpers";
 import { useAuth } from "../../../hooks/useAuth";
 import { formatMoney, getName } from "../../../utils/formatters";
 
@@ -29,7 +29,7 @@ function DeliveryPlanningPage() {
   const selectedDriver = availableDrivers.find((item) => item.id === driverUserId) || availableDrivers[0] || null;
 
   const assignedOrderIds = useMemo(() => new Set(db.deliveries.filter((delivery) => !["CANCELLED", "FAILED"].includes(delivery.status)).map((delivery) => delivery.orderId)), [db.deliveries]);
-  const readyOrders = db.orders.filter((order) => order.warehouseId === warehouseId && ["CONFIRMED", "SUBMITTED"].includes(order.status) && ["READY", "COMPLETED"].includes(order.fulfillmentStatus) && !assignedOrderIds.has(order.id));
+  const readyOrders = db.orders.filter((order) => order.warehouseId === warehouseId && order.status === "CONFIRMED" && ["FULFILLED", "READY"].includes(order.fulfillmentStatus) && !assignedOrderIds.has(order.id));
   const selectedOrders = readyOrders.filter((order) => selectedOrderIds.includes(order.id));
   const selectedCustomers = selectedOrders.map((order) => db.customers.find((customer) => customer.id === order.customerId)).filter(Boolean);
   const warehouse = db.warehouses.find((item) => item.id === warehouseId);
@@ -41,34 +41,12 @@ function DeliveryPlanningPage() {
   const toggleOrder = (id) => setSelectedOrderIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   const total = selectedOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
 
-  const createTrip = () => {
+  const createTrip = async () => {
     if (!selectedOrders.length) { notify("Reys uchun kamida bitta buyurtma tanlang", "warning"); return; }
     if (!selectedDriver || !vehicle.trim()) { notify("Haydovchi va mashinani tanlang", "warning"); return; }
-    let tripNumber = "";
-    updateLocalDb((draft) => {
-      const trip = {
-        id: makeId("trip"), number: nextNumber("TRIP", draft.deliveryTrips), date, driver: selectedDriver.name, driverEmployeeId: selectedDriver.id, driverPhone: selectedDriver.phone || "", vehicle: vehicle.trim(), warehouseId,
-        status: "PLANNED", deliveries: selectedOrders.length, plannedKm: Math.max(5, selectedOrders.length * 6), plannedMinutes: Math.max(40, selectedOrders.length * 25), createdAt: new Date().toISOString(),
-      };
-      tripNumber = trip.number;
-      draft.deliveryTrips.unshift(trip);
-      selectedOrders.forEach((order, index) => {
-        draft.deliveries.unshift({ id: makeId("del"), orderId: order.id, tripId: trip.id, customerId: order.customerId, stopOrder: index + 1, status: "PLANNED", total: order.total });
-        const target = draft.orders.find((item) => item.id === order.id);
-        if (target) target.deliveryStatus = "PLANNED";
-      });
-      addActivity(draft, {
-        entityType: "DELIVERY_TRIP",
-        entityId: trip.id,
-        action: "ASSIGNED",
-        title: "Reys haydovchiga biriktirildi",
-        description: `${selectedDriver.name} · ${vehicle.trim()}`,
-        actorId: user?.id || "system",
-        actorName: user?.name || "Tizim",
-      });
-    });
-    notify(`${tripNumber} yaratildi`);
-    navigate("/deliveries");
+    try { const trip = await apiRequest({ url: "/delivery/trips", body: { warehouseId, driverEmployeeId: selectedDriver.id === user?.id ? user.id : selectedDriver.id,
+      vehicle: vehicle.trim(), plannedKm: Math.max(5, selectedOrders.length * 6), plannedMinutes: Math.max(40, selectedOrders.length * 25), orderIds: selectedOrderIds } }); notify(`${trip.number} yaratildi`); navigate("/deliveries"); }
+    catch (error) { notify(error.message, "danger"); }
   };
 
   return <PageShell title="Reys rejalashtirish" description="Tayyor buyurtmalarni tanlang, haydovchi va mashinani biriktiring, Yandex xaritada marshrutni tekshirib reys yarating." eyebrow="Yetkazib berish" actions={<SecondaryButton type="button" onClick={() => navigate("/deliveries")}><ArrowLeft size={15} /> Yetkazib berishga qaytish</SecondaryButton>}>

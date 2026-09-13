@@ -42,15 +42,15 @@ function PaymentsPage() {
   const selectedDebt = selectedCustomer ? getCustomerDebt(db, selectedCustomer.id) : 0;
   const selectedAdvance = selectedCustomer ? getCustomerAdvance(db, selectedCustomer.id) : 0;
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
-    const result = collectPayment(form);
+    const result = await collectPayment(form);
     setMessage(result.message);
     notify(result.message || (result.ok ? "To‘lov qabul qilindi" : "To‘lovni qabul qilib bo‘lmadi"), result.ok ? "success" : "danger");
     if (result.ok) { setOpen(false); setForm({ customerId: "", amount: "", method: "CASH" }); }
   };
 
-  const approve = (id) => { const result = approvePayment(id); notify(result.message, result.ok ? "success" : "danger"); };
+  const approve = async (id) => { const result = await approvePayment(id); notify(result.message, result.ok ? "success" : "danger"); };
 
   return <>
     <SmartTablePage

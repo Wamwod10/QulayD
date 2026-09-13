@@ -1,24 +1,30 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { createEmployeeAuthUser, DIRECTORY_KEY, getHomePathForUser, loginWithPhone } from "./authService";
-import { exportLocalDb, resetLocalDbCache } from "./localDb";
+import { getHomePathForUser } from "./authService";
+import { clearSession, saveSession } from "./baseApi";
+import { STORAGE_KEYS } from "../constants/storageKeys";
 
-describe("employee platform access", () => {
-  beforeEach(() => { localStorage.clear(); resetLocalDbCache(); });
+describe("backend authentication state", () => {
+  beforeEach(() => localStorage.clear());
 
-  it("creates a login identity with independent module access and no raw PIN", () => {
-    const user = createEmployeeAuthUser({ companyId: "cmp-demo", employeeId: "emp-test", name: "Test Xodim", title: "Savdo menejeri", phone: "+998901234567", login: "manager.test", password: "Secret12", pinHash: "hashed-pin-only", moduleAccess: ["sales", "reports"] });
-    expect(user.roles).toEqual(["EMPLOYEE"]);
-    expect(user.moduleAccess).toEqual(["sales", "reports"]);
-    expect(getHomePathForUser(user)).toBe("/orders");
-    expect(loginWithPhone("manager.test", "Secret12").user.id).toBe(user.id);
-    expect(localStorage.getItem(DIRECTORY_KEY)).not.toContain('"pin":"');
+  it("persists only the access token and validated tenant context", () => {
+    saveSession({
+      accessToken: "access-token",
+      refreshToken: "must-never-be-persisted",
+      user: { companyId: "cmp-1", branchId: "branch-1" },
+    });
+
+    expect(localStorage.getItem(STORAGE_KEYS.accessToken)).toBe("access-token");
+    expect(localStorage.getItem(STORAGE_KEYS.selectedCompanyId)).toBe("cmp-1");
+    expect(localStorage.getItem(STORAGE_KEYS.selectedBranchId)).toBe("branch-1");
+    expect(JSON.stringify({ ...localStorage })).not.toContain("must-never-be-persisted");
+
+    clearSession();
+    expect(localStorage.getItem(STORAGE_KEYS.accessToken)).toBeNull();
   });
 
-  it("migrates the LocalDB registry without catalog and seeds payment methods", () => {
-    const db = JSON.parse(exportLocalDb());
-    expect(db.settings.modules.catalog).toBeUndefined();
-    expect(db.paymentMethods.map((item) => item.code)).toContain("CASH");
-    expect(db.meta.version).toBe(6);
+  it("selects the first permitted backend module as home", () => {
+    expect(getHomePathForUser({ modules: ["sales", "reports"] })).toBe("/orders");
+    expect(getHomePathForUser({ modules: [] })).toBe("/forbidden");
   });
 });

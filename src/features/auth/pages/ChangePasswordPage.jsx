@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 
 import { Field, PrimaryButton } from "../../../components/prototype/PrototypeUI";
 import { useAuth } from "../../../hooks/useAuth";
-import { getHomePathForUser } from "../../../services/authService";
 
 function ChangePasswordPage() {
   const auth = useAuth();
@@ -14,11 +13,11 @@ function ChangePasswordPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     setError("");
-    if (form.next.length < 6) {
-      setError("Yangi parol kamida 6 belgidan iborat bo‘lsin.");
+    if (form.next.length < 8 || !/[A-Z]/.test(form.next) || !/[a-z]/.test(form.next) || !/\d/.test(form.next)) {
+      setError("Yangi parol kamida 8 belgi, katta-kichik harf va raqamdan iborat bo‘lsin.");
       return;
     }
     if (form.next !== form.confirm) {
@@ -27,9 +26,8 @@ function ChangePasswordPage() {
     }
     setLoading(true);
     try {
-      auth.changePassword(form.current, form.next);
-      const destination = getHomePathForUser({ ...auth.user, mustChangePassword: false });
-      navigate(destination, { replace: true });
+      await auth.changePassword(form.current, form.next);
+      navigate("/login", { replace: true });
     } catch (err) {
       setError(err.message || "Parolni o‘zgartirib bo‘lmadi.");
     } finally {

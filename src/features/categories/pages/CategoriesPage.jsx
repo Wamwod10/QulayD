@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import RowActions from "../../../components/prototype/RowActions";
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import { Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
-import { addLocalRecord, removeLocalRecord, updateLocalRecord, useLocalDb } from "../../../services/localDb";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 
 function CategoriesPage() {
@@ -30,7 +31,7 @@ function CategoriesPage() {
     setOpen(true);
   };
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     const cleanName = name.trim();
     if (!cleanName) {
@@ -43,18 +44,18 @@ function CategoriesPage() {
       return;
     }
     if (editingId) {
-      updateLocalRecord("categories", editingId, { name: cleanName });
+      await apiRequest({ url: `/catalog/categories/${editingId}`, method: "PATCH", body: { name: cleanName } });
       notify("Kategoriya yangilandi");
     } else {
-      addLocalRecord("categories", { name: cleanName, status: "ACTIVE" });
+      await apiRequest({ url: "/catalog/categories", body: { name: cleanName, status: "ACTIVE" } });
       notify("Kategoriya qo‘shildi");
     }
     setOpen(false);
   };
 
-  const toggleStatus = (row) => {
+  const toggleStatus = async (row) => {
     const next = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    updateLocalRecord("categories", row.id, { status: next });
+    await apiRequest({ url: `/catalog/categories/${row.id}`, method: "PATCH", body: { status: next } });
     notify(next === "ACTIVE" ? "Kategoriya faollashtirildi" : "Kategoriya faolsizlantirildi");
   };
 
@@ -82,7 +83,7 @@ function CategoriesPage() {
               { label: row.status === "ACTIVE" ? "Faolsizlantirish" : "Faollashtirish", icon: Power, onClick: () => toggleStatus(row) },
               { label: "Butunlay o‘chirish", icon: Trash2, tone: "danger", onClick: () => {
                 if (row.productsCount > 0) { notify("Bu kategoriyada mahsulotlar bor. O‘chirish o‘rniga faolsizlantiring.", "warning"); return; }
-                if (window.confirm(`“${row.name}” kategoriyasi o‘chirilsinmi?`)) { removeLocalRecord("categories", row.id); notify("Kategoriya o‘chirildi", "warning"); }
+                if (window.confirm(`“${row.name}” kategoriyasi o‘chirilsinmi?`)) apiRequest({ url: `/catalog/categories/${row.id}`, method: "DELETE" }).then(() => notify("Kategoriya o‘chirildi", "warning")).catch((error) => notify(error.message, "danger"));
               } },
             ]} />,
           },

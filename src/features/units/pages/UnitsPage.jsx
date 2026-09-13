@@ -4,7 +4,8 @@ import { useState } from "react";
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import { Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
 import Select from "../../../components/ui/Select";
-import { addLocalRecord, updateLocalDb, useLocalDb } from "../../../services/localDb";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 
 const emptyForm = { name: "", type: "COUNT", shortName: "", precision: "0", status: "ACTIVE" };
@@ -16,12 +17,11 @@ function UnitsPage() {
   const [form, setForm] = useState(emptyForm);
   const openCreate = () => { setEditing(null); setForm(emptyForm); setOpen(true); };
   const openEdit = (unit) => { setEditing(unit); setForm({ name: unit.name || "", type: unit.type || "COUNT", shortName: unit.shortName || "", precision: String(unit.precision ?? 0), status: unit.status || "ACTIVE" }); setOpen(true); };
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     if (!form.name.trim() || !form.type) { notify("Nomi va turini kiriting", "warning"); return; }
-    const payload = { name: form.name.trim(), type: form.type, shortName: form.shortName.trim(), precision: Math.max(0, Math.min(6, Number(form.precision) || 0)), status: form.status };
-    if (editing) updateLocalDb((db) => { const target = db.units.find((item) => item.id === editing.id); if (target) Object.assign(target, payload); });
-    else addLocalRecord("units", payload);
+    const payload = { name: form.name.trim(), shortName: form.shortName.trim(), precision: Math.max(0, Math.min(6, Number(form.precision) || 0)), status: form.status };
+    await apiRequest({ url: editing ? `/catalog/units/${editing.id}` : "/catalog/units", method: editing ? "PATCH" : "POST", body: payload });
     setOpen(false);
     notify(editing ? "O‘lchov birligi yangilandi" : "O‘lchov birligi yaratildi");
   };

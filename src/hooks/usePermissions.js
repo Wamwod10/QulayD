@@ -1,16 +1,14 @@
 import { useMemo } from "react";
 
-import { permissionsForRoles } from "../constants/permissions";
 import { useAuth } from "./useAuth";
 
 export function usePermissions() {
   const { user } = useAuth();
   const permissions = useMemo(() => {
-    const inherited = permissionsForRoles(user?.roles || []);
     const explicit = Array.isArray(user?.permissions) ? user.permissions : [];
     const denied = new Set(Array.isArray(user?.deniedPermissions) ? user.deniedPermissions : []);
-    return [...new Set([...inherited, ...explicit])].filter((item) => !denied.has(item));
-  }, [user?.roles, user?.permissions, user?.deniedPermissions]);
+    return [...new Set(explicit)].filter((item) => !denied.has(item));
+  }, [user?.permissions, user?.deniedPermissions]);
 
   const permissionSet = useMemo(() => new Set(permissions), [permissions]);
   const isOwner = Boolean(user?.roles?.includes("OWNER"));

@@ -1,8 +1,6 @@
 import { useCallback, useMemo } from "react";
 
 import { useAuth } from "./useAuth";
-import { useLocalDb } from "../services/localDb";
-import { getEffectiveCompanyModules } from "../services/authService";
 
 export const MODULE_ALIASES = Object.freeze({
   dashboard: "dashboard", sales: "sales", pos: "pos", inventory: "inventory",
@@ -11,21 +9,16 @@ export const MODULE_ALIASES = Object.freeze({
 });
 
 export function useModuleAccess() {
-  const { company, user } = useAuth();
-  const localModules = useLocalDb((db) => db.settings?.modules || {});
-  const platformModules = useMemo(() => {
-    try { return company?.id ? getEffectiveCompanyModules(company.id) : {}; } catch { return {}; }
-  }, [company?.id]);
-  const isSuperAdmin = user?.roles?.includes("SUPER_ADMIN");
-  const isEmployee = user?.roles?.includes("EMPLOYEE");
-
+  const { user } = useAuth();
+  const localModules = useMemo(() => Object.fromEntries(
+    Object.keys(MODULE_ALIASES).map((key) => [key, Boolean(user?.modules?.includes(key))]),
+  ), [user?.modules]);
+  const platformModules = localModules;
   const isEnabled = useCallback((moduleKey) => {
     if (!moduleKey) return true;
     if (moduleKey === "help") return true;
-    if (isSuperAdmin) return true;
-    const employeeAllowed = !isEmployee || user?.moduleAccess?.includes(moduleKey);
-    return employeeAllowed && platformModules[moduleKey] !== false && localModules[moduleKey] !== false;
-  }, [isEmployee, isSuperAdmin, localModules, platformModules, user?.moduleAccess]);
+    return Boolean(user?.modules?.includes(moduleKey));
+  }, [user?.modules]);
 
   return { modules: localModules, platformModules, isEnabled };
 }

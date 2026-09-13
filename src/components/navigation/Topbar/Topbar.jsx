@@ -37,12 +37,12 @@ import styles from "./Topbar.module.scss";
 
 const quickCreateActions = [
   { label: "Yangi buyurtma", to: "/orders/new", module: "sales", permission: PERMISSIONS.ORDERS_CREATE },
-  { label: "Tezkor kassa", to: "/sales/pos", module: "pos", permission: PERMISSIONS.ORDERS_CREATE },
-  { label: "Yangi mahsulot", to: "/inventory/products?create=1", module: "inventory", permission: PERMISSIONS.PRODUCTS_MANAGE },
+  { label: "Tezkor kassa", to: "/sales/pos", module: "pos", permission: PERMISSIONS.POS_CREATE },
+  { label: "Yangi mahsulot", to: "/inventory/products?create=1", module: "inventory", permission: PERMISSIONS.PRODUCTS_CREATE },
   { label: "Yangi mijoz", to: "/customers?create=1", module: "partners", permission: PERMISSIONS.CUSTOMERS_MANAGE },
   { label: "Mahsulot kirimi", to: "/inventory/receipts", module: "inventory", permission: PERMISSIONS.INVENTORY_RECEIVE },
   { label: "To‘lov qabul qilish", to: "/payments", module: "finance", permission: PERMISSIONS.PAYMENTS_COLLECT },
-  { label: "Marshrut rejasi", to: "/routes/plans", module: "routes", permission: PERMISSIONS.ORDERS_VIEW },
+  { label: "Marshrut rejasi", to: "/routes/plans", module: "routes", permission: PERMISSIONS.ROUTES_VIEW },
 ];
 
 const shortcutGroups = [
@@ -59,9 +59,9 @@ const shortcutGroups = [
     label: "Savdo",
     items: [
       { label: "Yangi buyurtma", keys: "Alt B", to: "/orders/new", module: "sales", permission: PERMISSIONS.ORDERS_CREATE },
-      { label: "Tezkor kassa", keys: "Alt P", to: "/sales/pos", module: "pos", permission: PERMISSIONS.ORDERS_CREATE },
+      { label: "Tezkor kassa", keys: "Alt P", to: "/sales/pos", module: "pos", permission: PERMISSIONS.POS_CREATE },
       { label: "Yangi mijoz", keys: "Alt C", to: "/customers?create=1", module: "partners", permission: PERMISSIONS.CUSTOMERS_MANAGE },
-      { label: "Yangi mahsulot", keys: "Alt M", to: "/inventory/products?create=1", module: "inventory", permission: PERMISSIONS.PRODUCTS_MANAGE },
+      { label: "Yangi mahsulot", keys: "Alt M", to: "/inventory/products?create=1", module: "inventory", permission: PERMISSIONS.PRODUCTS_CREATE },
     ],
   },
   {
@@ -71,7 +71,7 @@ const shortcutGroups = [
       { label: "Omborlararo ko‘chirish", keys: "Alt T", to: "/inventory/transfers", module: "inventory", permission: PERMISSIONS.INVENTORY_TRANSFER },
       { label: "Inventarizatsiya", keys: "Alt I", to: "/inventory/counts", module: "inventory", permission: PERMISSIONS.INVENTORY_VIEW },
       { label: "Yangi reys", keys: "Alt D", to: "/deliveries/planning", module: "delivery", permission: PERMISSIONS.DELIVERY_PLAN },
-      { label: "Tashriflar", keys: "Alt V", to: "/visits", module: "agents", permission: PERMISSIONS.ORDERS_VIEW },
+      { label: "Tashriflar", keys: "Alt V", to: "/visits", module: "agents", permission: PERMISSIONS.AGENTS_VIEW },
       { label: "To‘lov qabul qilish", keys: "Alt F", to: "/payments", module: "finance", permission: PERMISSIONS.PAYMENTS_COLLECT },
       { label: "Xodim qo‘shish", keys: "Alt E", to: "/users", module: "settings", permission: PERMISSIONS.USERS_MANAGE },
     ],

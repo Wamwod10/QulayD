@@ -7,7 +7,8 @@ import { Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../
 import Select from "../../../components/ui/Select";
 import { useAuth } from "../../../hooks/useAuth";
 import { createEmployeeIdentity, updateEmployeeRecord } from "../../../services/employeeService";
-import { makeId, updateLocalDb, useLocalDb } from "../../../services/localDb";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 import { formatMoney } from "../../../utils/formatters";
 import { getRoleLabel } from "../../../utils/labels";
@@ -53,9 +54,9 @@ function UsersPage() {
     }
   };
 
-  const toggleStatus = (row) => {
-    const next = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    updateEmployeeRecord(row.id, { status: next });
+  const toggleStatus = async (row) => {
+    const next = row.status === "ACTIVE" ? "BLOCKED" : "ACTIVE";
+    await updateEmployeeRecord(row.id, { status: next });
     notify(next === "ACTIVE" ? "Xodim faollashtirildi" : "Xodim faolsizlantirildi", next === "ACTIVE" ? "success" : "warning");
   };
 
@@ -72,7 +73,7 @@ function UsersPage() {
     setTypeModalOpen(true);
   };
 
-  const saveEmployeeType = (event) => {
+  const saveEmployeeType = async (event) => {
     event.preventDefault();
     const cleanName = typeName.trim();
     if (!cleanName) {
@@ -84,29 +85,17 @@ function UsersPage() {
       notify("Bu nomdagi xodim turi mavjud", "warning");
       return;
     }
-    let savedCode = editingType?.code || "";
-    updateLocalDb((draft) => {
-      if (!Array.isArray(draft.employeeTypes)) draft.employeeTypes = [];
-      if (editingType) {
-        const target = draft.employeeTypes.find((item) => item.id === editingType.id);
-        if (target && !target.system) target.name = cleanName;
-      } else {
-        savedCode = makeEmployeeTypeCode();
-        draft.employeeTypes.push({ id: makeId("etype"), code: savedCode, name: cleanName, system: false, status: "ACTIVE", createdAt: new Date().toISOString() });
-      }
-    });
+    const savedCode = editingType?.code || makeEmployeeTypeCode();
+    await apiRequest({ url: editingType ? `/workforce/employee-types/${editingType.id}` : "/workforce/employee-types", method: editingType ? "PATCH" : "POST", body: { code: savedCode, name: cleanName, status: "ACTIVE" } });
     if (!editingType) setForm((current) => ({ ...current, role: savedCode }));
     setTypeModalOpen(false);
     setTypeName("");
     notify(editingType ? "Xodim turi yangilandi" : "Yangi xodim turi qo‘shildi");
   };
 
-  const archiveEmployeeType = (type) => {
+  const archiveEmployeeType = async (type) => {
     if (type.system) return;
-    updateLocalDb((draft) => {
-      const target = (draft.employeeTypes || []).find((item) => item.id === type.id);
-      if (target) target.status = "INACTIVE";
-    });
+    await apiRequest({ url: `/workforce/employee-types/${type.id}`, method: "PATCH", body: { status: "INACTIVE" } });
     if (form.role === type.code) setForm((current) => ({ ...current, role: "OTHER" }));
     notify("Xodim turi arxivlandi", "warning");
   };

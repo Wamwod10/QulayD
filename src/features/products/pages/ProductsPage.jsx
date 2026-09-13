@@ -10,7 +10,8 @@ import { Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../
 import ImageUploader from "../../../components/ui/ImageUploader";
 import Select from "../../../components/ui/Select";
 import { adjustProductStock, createProduct } from "../../../services/prototypeActions";
-import { updateLocalDb, useLocalDb } from "../../../services/localDb";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 import { PERMISSIONS } from "../../../constants/permissions";
 import { usePermissions } from "../../../hooks/usePermissions";
@@ -154,7 +155,7 @@ function ProductsPage() {
     return { ok: true, sku, barcodes };
   };
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     if (!form.name.trim() || !form.categoryId || !form.unitId) {
       notify("Majburiy maydonlarni to‘ldiring", "warning");
@@ -172,26 +173,16 @@ function ProductsPage() {
 
     try {
       if (editing) {
-        updateLocalDb((draft) => {
-          const product = draft.products.find((item) => item.id === editing.id);
-          if (!product) return;
-          Object.assign(product, {
-            name: form.name.trim(),
-            image: form.image || "",
-            sku: identity.sku,
-            barcodes: identity.barcodes,
-            barcode: identity.barcodes[0] || "",
-            categoryId: form.categoryId,
-            unitId: form.unitId,
-            costPrice: Math.max(0, Number(form.costPrice) || 0),
-            price: Math.max(0, Number(form.price) || 0),
-            wholesalePrice: Math.max(0, Number(form.wholesalePrice) || 0),
-            minStock: Math.max(0, Number(form.minStock) || 0),
-            updatedAt: new Date().toISOString(),
-          });
-        });
+        await apiRequest({ url: `/catalog/products/${editing.id}`, method: "PATCH", body: {
+          name: form.name.trim(), sku: identity.sku, categoryId: form.categoryId, unitId: form.unitId,
+          costPrice: Math.max(0, Number(form.costPrice) || 0), minStock: Math.max(0, Number(form.minStock) || 0),
+          barcodes: identity.barcodes.map((barcode, index) => ({ barcode, isPrimary: index === 0 })),
+          prices: db.priceLists.slice(0, 2).map((list, index) => ({ priceListId: list.id, price: Math.max(0, Number(index ? form.wholesalePrice : form.price) || 0) })),
+          ...(form.image && (/^https:\/\//.test(form.image) || /^\/uploads\//.test(form.image)) ? { imageUrl: form.image } : {}),
+        } });
         if (form.warehouseId && form.newStock !== "") {
-          const stockResult = adjustProductStock({ productId: editing.id, warehouseId: form.warehouseId, newOnHand: form.newStock });
+          const currentOnHand = db.balances.find((item) => item.productId === editing.id && item.warehouseId === form.warehouseId)?.onHand || 0;
+          const stockResult = await adjustProductStock({ productId: editing.id, warehouseId: form.warehouseId, newOnHand: form.newStock, currentOnHand });
           if (!stockResult.ok) {
             notify(stockResult.message, "warning");
             return;
@@ -199,8 +190,9 @@ function ProductsPage() {
         }
         notify("Mahsulot va qoldiq yangilandi");
       } else {
-        createProduct({ ...form, sku: identity.sku, barcodes: identity.barcodes, barcode: identity.barcodes[0] || "" });
-        notify("Mahsulot yaratildi");
+        const result = await createProduct({ ...form, priceListId: db.priceLists[0]?.id, wholesalePriceListId: db.priceLists[1]?.id, sku: identity.sku, barcodes: identity.barcodes, barcode: identity.barcodes[0] || "" });
+        notify(result.message, result.ok ? "success" : "danger");
+        if (!result.ok) return;
       }
 
       setOpen(false);
@@ -211,21 +203,18 @@ function ProductsPage() {
     }
   };
 
-  const toggleStatus = (product) => {
+  const toggleStatus = async (product) => {
     const next = product.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    updateLocalDb((draft) => {
-      const target = draft.products.find((item) => item.id === product.id);
-      if (target) target.status = next;
-    });
-    notify(next === "ACTIVE" ? "Mahsulot faollashtirildi" : "Mahsulot faolsizlantirildi");
+    try { await apiRequest({ url: `/catalog/products/${product.id}`, method: "PATCH", body: { status: next } }); notify(next === "ACTIVE" ? "Mahsulot faollashtirildi" : "Mahsulot faolsizlantirildi"); }
+    catch (error) { notify(error.message, "danger"); }
   };
 
   const archiveSelected = (selectedRows, clear) => (
     <>
       <SecondaryButton type="button" onClick={() => printProductLabels(selectedRows)}><Printer size={15} /> Shtrix/QR chop etish</SecondaryButton>
-      <SecondaryButton type="button" onClick={() => {
-        const ids = selectedRows.map((item) => item.id);
-        updateLocalDb((draft) => { draft.products.forEach((product) => { if (ids.includes(product.id)) product.status = "INACTIVE"; }); });
+       <SecondaryButton type="button" onClick={async () => {
+         const ids = selectedRows.map((item) => item.id);
+         await Promise.all(ids.map((id) => apiRequest({ url: `/catalog/products/${id}`, method: "PATCH", body: { status: "INACTIVE" } })));
         clear();
         notify(`${ids.length} ta mahsulot faolsizlantirildi`);
       }}><Archive size={15} /> Faolsizlantirish</SecondaryButton>

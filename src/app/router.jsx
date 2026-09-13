@@ -5,6 +5,7 @@ import AgentsPage from "../features/agents/pages/AgentsPage";
 import ChangePasswordPage from "../features/auth/pages/ChangePasswordPage";
 import LoginPage from "../features/auth/pages/LoginPage";
 import RegisterPage from "../features/auth/pages/RegisterPage";
+import PasswordRecoveryPage from "../features/auth/pages/PasswordRecoveryPage";
 import CategoriesPage from "../features/categories/pages/CategoriesPage";
 import HelpCenterPage from "../features/help/pages/HelpCenterPage";
 import LiveOperationsPage from "../features/operations/pages/LiveOperationsPage";
@@ -42,7 +43,6 @@ import RouteTemplatesPage from "../features/routes/pages/RouteTemplatesPage";
 import SalesPage from "../features/sales/pages/SalesPage";
 import SettingsPage from "../features/settings/pages/SettingsPage";
 import SuppliersPage from "../features/suppliers/pages/SuppliersPage";
-import { SuperAdminLayout, SuperAdminPage } from "../features/super-admin";
 import UnitsPage from "../features/units/pages/UnitsPage";
 import UsersPage from "../features/users/pages/UsersPage";
 import UserDetailsPage from "../features/users/pages/UserDetailsPage";
@@ -171,35 +171,18 @@ export const router = createBrowserRouter([
     children: [
       { path: "/login", element: <GuestRoute><LoginPage /></GuestRoute> },
       { path: "/register", element: <GuestRoute><RegisterPage /></GuestRoute> },
+      { path: "/forgot-password", element: <GuestRoute><PasswordRecoveryPage /></GuestRoute> },
+      { path: "/reset-password", element: <GuestRoute><PasswordRecoveryPage reset /></GuestRoute> },
       { path: "/change-password", element: <ProtectedRoute allowTemporaryPassword><ChangePasswordPage /></ProtectedRoute> },
     ],
   },
   {
     path: "/sales/pos",
-    element: <ProtectedRoute allowRoles={platformRoles}><ModuleRoute moduleKey="pos"><PermissionRoute permission={PERMISSIONS.ORDERS_CREATE}><PosPage /></PermissionRoute></ModuleRoute></ProtectedRoute>,
+    element: <ProtectedRoute allowRoles={platformRoles}><ModuleRoute moduleKey="pos"><PermissionRoute permission={PERMISSIONS.POS_CREATE}><PosPage /></PermissionRoute></ModuleRoute></ProtectedRoute>,
   },
   {
     element: <ProtectedRoute allowRoles={platformRoles}><AppLayout /></ProtectedRoute>,
     children: securedOwnerChildren,
-  },
-  {
-    path: "/super-admin",
-    element: <ProtectedRoute allowRoles={["SUPER_ADMIN"]}><SuperAdminLayout /></ProtectedRoute>,
-    children: [
-      { index: true, element: <SuperAdminPage section="dashboard" /> },
-      { path: "companies", element: <SuperAdminPage section="companies" /> },
-      { path: "users", element: <SuperAdminPage section="users" /> },
-      { path: "plans", element: <SuperAdminPage section="plans" /> },
-      { path: "modules", element: <SuperAdminPage section="modules" /> },
-      { path: "translations", element: <SuperAdminPage section="translations" /> },
-      { path: "notifications", element: <SuperAdminPage section="notifications" /> },
-      { path: "security", element: <SuperAdminPage section="security" /> },
-      { path: "analytics", element: <SuperAdminPage section="analytics" /> },
-      { path: "integrations", element: <SuperAdminPage section="integrations" /> },
-      { path: "support", element: <SuperAdminPage section="support" /> },
-      { path: "health", element: <SuperAdminPage section="health" /> },
-      { path: "settings", element: <SuperAdminPage section="settings" /> },
-    ],
   },
   { path: "/forbidden", element: <ProtectedRoute allowTemporaryPassword><ForbiddenPage /></ProtectedRoute> },
 ]);

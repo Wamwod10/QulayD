@@ -4,7 +4,8 @@ import { useState } from "react";
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import { Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
 import Select from "../../../components/ui/Select";
-import { addLocalRecord, updateLocalRecord, useLocalDb } from "../../../services/localDb";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 import { getLabel } from "../../../utils/labels";
 import { priceListCustomerCount, normalizePriceList } from "../priceUtils";
@@ -20,20 +21,16 @@ function PriceListsPage() {
 
   const startCreate = () => { setEditingId(""); setForm(initialForm); setOpen(true); };
   const startEdit = (row) => { setEditingId(row.id); setForm({ ...initialForm, ...row }); setOpen(true); };
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     if (!form.name.trim()) { notify("Narx ro‘yxati nomini kiriting", "warning"); return; }
-    const payload = { ...form, name: form.name.trim(), adjustmentPercent: Number(form.adjustmentPercent || 0), priority: Number(form.priority || 0) };
-    if (editingId) updateLocalRecord("priceLists", editingId, payload);
-    else addLocalRecord("priceLists", payload);
+    const payload = { name: form.name.trim(), code: editingId ? undefined : `PL-${Date.now().toString(36).toUpperCase()}`, currency: db.settings.company.currency || "UZS", status: form.status };
+    await apiRequest({ url: editingId ? `/pricing/${editingId}` : "/pricing", method: editingId ? "PATCH" : "POST", body: payload });
     notify(editingId ? "Narx ro‘yxati yangilandi" : "Narx ro‘yxati yaratildi");
     setOpen(false);
   };
-  const duplicate = (row) => {
-    const payload = { ...row };
-    delete payload.id;
-    delete payload.customers;
-    addLocalRecord("priceLists", { ...payload, name: `${row.name} nusxa`, status: "ACTIVE" });
+  const duplicate = async (row) => {
+    await apiRequest({ url: "/pricing", body: { name: `${row.name} nusxa`, code: `PL-${Date.now().toString(36).toUpperCase()}`, currency: row.currency || "UZS", status: "ACTIVE" } });
     notify("Narx ro‘yxati nusxalandi");
   };
 

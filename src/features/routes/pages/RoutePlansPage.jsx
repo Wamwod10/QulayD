@@ -4,7 +4,8 @@ import { useState } from "react";
 
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import { Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
-import { addLocalRecord, useLocalDb } from "../../../services/localDb";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 import { getName, shortDate } from "../../../utils/formatters";
 
@@ -14,7 +15,7 @@ function RoutePlansPage() {
   const [form, setForm] = useState({ templateId: db.routeTemplates[0]?.id || "", date: new Date().toISOString().slice(0, 10), name: "" });
   const rows = db.routePlans.map((item) => ({ ...item, agent: getName(db.agents, item.agentId), stopCount: item.stops?.length || 0, done: item.stops?.filter((stop) => stop.status === "DONE").length || 0, progress: item.stops?.length ? Math.round((item.stops.filter((stop) => stop.status === "DONE").length / item.stops.length) * 100) : 0 }));
 
-  const createPlan = (event) => {
+  const createPlan = async (event) => {
     event.preventDefault();
     const template = db.routeTemplates.find((item) => item.id === form.templateId);
     if (!template) {
@@ -26,14 +27,8 @@ function RoutePlansPage() {
       notify("Bu agent uchun tanlangan sanada marshrut rejasi allaqachon mavjud", "warning");
       return;
     }
-    addLocalRecord("routePlans", {
-      date: form.date,
-      name: form.name.trim() || `${template.name} · ${form.date}`,
-      agentId: template.agentId,
-      templateId: template.id,
-      status: "PLANNED",
-      stops: template.stops.map((customerId, index) => ({ customerId, order: index + 1, status: "PENDING" })),
-    });
+    try { await apiRequest({ url: "/routes/plans", body: { planDate: form.date, name: form.name.trim() || `${template.name} · ${form.date}`, agentId: template.agentId, templateId: template.id, stops: template.stops.map((customerId, index) => ({ customerId, stopOrder: index + 1 })) } }); }
+    catch (error) { notify(error.message, "danger"); return; }
     setOpen(false);
     notify("Marshrut rejasi yaratildi");
   };

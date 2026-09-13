@@ -1,33 +1,22 @@
 import { DEFAULT_COMPANY_ID, getActiveCompanyId } from "../services/authService";
 import { currencyMeta, FALLBACK_RATES } from "../services/currencyService";
 
-function readLocalDb() {
+function readLocalPreferences() {
   if (typeof window === "undefined") return null;
   const companyId = getActiveCompanyId() || DEFAULT_COMPANY_ID;
-  const keys = [
-    `qulay.prototype.db.v5.company.${companyId}`,
-    "qulay.prototype.db.v4",
-    "qulay.prototype.db.v3",
-    "qulay.prototype.db.v2",
-    "qulay.prototype.db.v1",
-  ];
-  for (const key of keys) {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) continue;
-    try { return JSON.parse(raw); } catch { /* keyingi versiya tekshiriladi */ }
-  }
-  return null;
+  const raw = window.localStorage.getItem(`qulay.ui.preferences.v1.${companyId}`);
+  try { return raw ? JSON.parse(raw) : null; } catch { return null; }
 }
 
 function readLocalSettings() {
-  return readLocalDb()?.settings || null;
+  return readLocalPreferences()?.settings || null;
 }
 
 export function formatMoney(value, currency) {
   const number = Number(value) || 0;
-  const db = readLocalDb();
-  const configuredCurrency = currency || db?.settings?.company?.currency || "UZS";
-  const rates = db?.currencyRates?.rates || FALLBACK_RATES;
+  const preferences = readLocalPreferences();
+  const configuredCurrency = currency || preferences?.settings?.company?.currency || "UZS";
+  const rates = preferences?.currencyRates?.rates || FALLBACK_RATES;
   const rate = configuredCurrency === "UZS" ? 1 : Number(rates?.[configuredCurrency] || 0);
   const converted = configuredCurrency === "UZS" || !rate ? number : number / rate;
   const meta = currencyMeta(configuredCurrency);

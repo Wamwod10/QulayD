@@ -6,7 +6,8 @@ import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import { PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
 import Select from "../../../components/ui/Select";
 import { approveOrderRequest, completeDelivery, markOrderReadyForDelivery, rejectOrderRequest, sendOrderToPreparation } from "../../../services/prototypeActions";
-import { updateLocalDb, useLocalDb } from "../../../services/localDb";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { useAuth } from "../../../hooks/useAuth";
 import { notify } from "../../../services/notify";
 import { formatDateTime, formatMoney, formatRelativeDateTime, getName, shortDate } from "../../../utils/formatters";
@@ -46,32 +47,27 @@ function OrderDetail({ row: selectedRow, db, navigate, isOwner }) {
   const activity = (db.activityLog || []).filter((entry) => entry.entityType === "ORDER" && entry.entityId === row.id).slice(0, 12);
   const delivery = (db.deliveries || []).find((item) => item.orderId === row.id);
 
-  const saveAgent = () => {
-    updateLocalDb((draft) => {
-      const order = draft.orders.find((item) => item.id === row.id);
-      if (!order) return;
-      order.agentId = agentId;
-      order.updatedAt = new Date().toISOString();
-    });
-    notify("Mas’ul agent yangilandi");
+  const saveAgent = async () => {
+    try { await apiRequest({ url: `/orders/${row.id}`, method: "PATCH", body: { agentId: agentId || null } }); notify("Mas’ul agent yangilandi"); }
+    catch (error) { notify(error.message, "danger"); }
   };
 
-  const nextAction = () => {
+  const nextAction = async () => {
     if (row.approvalStatus === "PENDING") {
       if (!isOwner) { notify("Buyurtma Owner tasdig‘ini kutmoqda", "info"); return; }
-      const result = approveOrderRequest(row.id); notify(result.message, result.ok ? "success" : "warning"); return;
+      const result = await approveOrderRequest(row.id); notify(result.message, result.ok ? "success" : "warning"); return;
     }
     if (!["RESERVED", "PICKING", "PICKED", "PACKING", "PACKED", "READY", "COMPLETED"].includes(row.fulfillmentStatus)) {
-      const result = sendOrderToPreparation(row.id); notify(result.message, result.ok ? "success" : "warning"); return;
+      const result = await sendOrderToPreparation(row.id); notify(result.message, result.ok ? "success" : "warning"); return;
     }
     if (row.fulfillmentStatus !== "READY" && row.fulfillmentStatus !== "COMPLETED") {
-      const result = markOrderReadyForDelivery(row.id); notify(result.message, result.ok ? "success" : "warning"); return;
+      const result = await markOrderReadyForDelivery(row.id); notify(result.message, result.ok ? "success" : "warning"); return;
     }
     if (!["PLANNED", "OUT_FOR_DELIVERY", "ARRIVED", "PARTIALLY_DELIVERED", "DELIVERED"].includes(row.deliveryStatus)) {
       navigate("/deliveries/planning"); return;
     }
     if (row.deliveryStatus !== "DELIVERED" && delivery) {
-      const result = completeDelivery(delivery.id, { recipientName: "Biznes egasi tomonidan tasdiqlandi" }); notify(result?.message || "Yetkazildi", result?.ok === false ? "warning" : "success");
+      const result = await completeDelivery(delivery.id, { recipientName: "Biznes egasi tomonidan tasdiqlandi" }); notify(result?.message || "Yetkazildi", result?.ok === false ? "warning" : "success");
     }
   };
 
@@ -88,7 +84,7 @@ function OrderDetail({ row: selectedRow, db, navigate, isOwner }) {
   return <div className="qp-order-owner-detail">
     <section className="qp-order-current-owner"><div><span>Hozirgi bosqich</span><strong>{stage.label}</strong><small>{responsibility.name} · {responsibility.label}{responsibility.since ? ` · ${formatRelativeDateTime(responsibility.since)}` : ""}</small></div>{stage.label === "Yetkazilmoqda" ? <Truck size={22}/> : <PackageCheck size={22}/>}</section>
     <OrderStatusTimeline order={row}/>
-    <section className="qp-order-smart-action"><div><span>Keyingi tavsiya</span><strong>{actionLabel}</strong><small>{row.approvalStatus === "PENDING" ? "Admin yaratgan buyurtma stock band qilinishidan oldin Owner qarorini kutadi." : "Qulay ortiqcha statuslarni yashiradi va keyingi kerakli amalni ko‘rsatadi."}</small></div>{row.deliveryStatus !== "DELIVERED" && canAct ? <div className="qp-order-smart-buttons">{row.approvalStatus === "PENDING" && isOwner ? <SecondaryButton onClick={() => { const result = rejectOrderRequest(row.id); notify(result.message, result.ok ? "warning" : "danger"); }}>Rad etish</SecondaryButton> : null}<PrimaryButton onClick={nextAction}>{actionLabel}<ArrowRight size={15}/></PrimaryButton></div> : row.deliveryStatus === "DELIVERED" ? <StatusPill status="COMPLETED"/> : null}</section>
+    <section className="qp-order-smart-action"><div><span>Keyingi tavsiya</span><strong>{actionLabel}</strong><small>{row.approvalStatus === "PENDING" ? "Admin yaratgan buyurtma stock band qilinishidan oldin Owner qarorini kutadi." : "Qulay ortiqcha statuslarni yashiradi va keyingi kerakli amalni ko‘rsatadi."}</small></div>{row.deliveryStatus !== "DELIVERED" && canAct ? <div className="qp-order-smart-buttons">{row.approvalStatus === "PENDING" && isOwner ? <SecondaryButton onClick={async () => { const result = await rejectOrderRequest(row.id); notify(result.message, result.ok ? "warning" : "danger"); }}>Rad etish</SecondaryButton> : null}<PrimaryButton onClick={nextAction}>{actionLabel}<ArrowRight size={15}/></PrimaryButton></div> : row.deliveryStatus === "DELIVERED" ? <StatusPill status="COMPLETED"/> : null}</section>
     <div className="qp-drawer-details"><div className="qp-drawer-detail-row"><span>Mijoz</span><strong>{getName(db.customers, row.customerId)}</strong></div><div className="qp-drawer-detail-row"><span>Summa</span><strong>{formatMoney(row.total)}</strong></div><div className="qp-drawer-detail-row"><span>Ombor</span><strong>{getName(db.warehouses, row.warehouseId)}</strong></div></div>
     <section className="qp-order-products"><h3>Mahsulotlar</h3><div>{(row.items || []).map((item) => { const product = db.products.find((entry) => entry.id === item.productId); const unit = db.units.find((entry) => entry.id === product?.unitId); return <article key={`${row.id}-${item.productId}`}><div><strong>{product?.name || "Mahsulot"}</strong><span>{item.quantity} {unit?.shortName || unit?.name || ""} × {formatMoney(item.price)}</span></div><strong>{formatMoney(Number(item.quantity || 0) * Number(item.price || 0))}</strong></article>; })}</div></section>
     <section className="qp-order-owner-assignment"><div><UserRound size={16}/><span>Mas’ul agent</span></div><div className="qp-inline-actions"><Select value={agentId} onChange={(event)=>setAgentId(event.target.value)}><option value="">Agent biriktirilmagan</option>{(db.agents || []).filter((agent)=>agent.status === "ACTIVE").map((agent)=><option key={agent.id} value={agent.id}>{agent.name} · {agent.territory || "Hudud yo‘q"}</option>)}</Select><SecondaryButton onClick={saveAgent}>Saqlash</SecondaryButton></div></section>

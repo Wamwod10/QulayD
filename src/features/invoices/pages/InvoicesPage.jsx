@@ -20,9 +20,9 @@ function InvoicesPage() {
   const paidTotal = rows.reduce((sum, invoice) => sum + Number(invoice.paid || 0), 0);
   const overdue = rows.filter((invoice) => invoice.status !== "PAID" && invoice.dueDate && invoice.dueDate < today).reduce((sum, invoice) => sum + Math.max(0, invoice.balance), 0);
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
-    const result = createManualInvoice(form);
+    const result = await createManualInvoice(form);
     notify(result.message, result.ok ? "success" : "danger");
     if (result.ok) { setOpen(false); setForm({ customerId: "", total: "", date: today, dueDate: today, note: "" }); }
   };

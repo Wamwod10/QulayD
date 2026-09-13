@@ -3,12 +3,14 @@ import { useState } from "react";
 
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import { Field, Modal, PrimaryButton, SecondaryButton } from "../../../components/prototype/PrototypeUI";
-import { updateLocalRecord, useLocalDb } from "../../../services/localDb";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 import { formatMoney } from "../../../utils/formatters";
 
 function PricingPage() {
-  const products = useLocalDb((db) => db.products);
+  const db = useLocalDb();
+  const products = db.products;
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ price: 0, wholesalePrice: 0 });
 
@@ -17,7 +19,7 @@ function PricingPage() {
     setForm({ price: Number(product.price || 0), wholesalePrice: Number(product.wholesalePrice || 0) });
   };
 
-  const save = (event) => {
+  const save = async (event) => {
     event.preventDefault();
     if (!editing) return;
     const price = Math.max(0, Number(form.price) || 0);
@@ -26,7 +28,8 @@ function PricingPage() {
       notify("Tannarx sotuv narxidan yuqori kiritildi. Qiymatni tekshiring.", "warning");
       return;
     }
-    updateLocalRecord("products", editing.id, { price, wholesalePrice });
+    try { await apiRequest({ url: `/catalog/products/${editing.id}`, method: "PATCH", body: { prices: db.priceLists.slice(0, 2).map((list, index) => ({ priceListId: list.id, price: index ? wholesalePrice : price })) } }); }
+    catch (error) { notify(error.message, "danger"); return; }
     notify(`${editing.name} narxlari yangilandi`);
     setEditing(null);
   };

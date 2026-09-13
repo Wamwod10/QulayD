@@ -6,11 +6,16 @@ import { usePlatformSettings } from "../../../hooks/usePlatformSettings";
 import { getFinanceSummary } from "../../../services/financeSelectors";
 import { useLocalDb } from "../../../services/localDb";
 import { formatDateTime, formatMoney, getName } from "../../../utils/formatters";
+import { useModuleAccess } from "../../../hooks/useModuleAccess";
+import { usePermissions } from "../../../hooks/usePermissions";
+import { getRouteModule, getRoutePermission } from "../../../app/navigationConfig";
 
 function NotificationsPage() {
   const { user, company } = useAuth();
   const platformSettings = usePlatformSettings();
   const db = useLocalDb();
+  const { isEnabled } = useModuleAccess();
+  const { can } = usePermissions();
   const settings = db.settings.notifications;
   const broadcastsEnabled = platformSettings?.featureFlags?.platformBroadcasts !== false;
   const broadcasts = broadcastsEnabled ? (platformSettings?.broadcasts || []).filter((item) => {
@@ -19,18 +24,20 @@ function NotificationsPage() {
     return true;
   }).slice(0, 5) : [];
   const today = new Date().toISOString().slice(0, 10);
-  const low = settings.lowStock === false || db.settings.inventory.lowStockAlerts === false ? [] : db.balances
+  const low = !isEnabled("inventory") || settings.lowStock === false || db.settings.inventory.lowStockAlerts === false ? [] : db.balances
     .map((balance) => ({ ...balance, product: db.products.find((item) => item.id === balance.productId) }))
     .filter((item) => item.product && item.onHand - item.reserved <= item.product.minStock)
     .slice(0, 5);
   const finance = getFinanceSummary(db);
-  const debtCustomers = settings.overdueDebt === false ? [] : finance.rows.filter((item) => item.overdue > 0);
-  const failed = settings.failedDelivery === false ? [] : db.deliveries.filter((item) => item.status === "FAILED");
-  const todayOrders = settings.newOrder === false ? [] : db.orders.filter((item) => item.date === today);
-  const todayPayments = settings.payment === false ? [] : db.payments.filter((item) => item.date === today);
+  const debtCustomers = !isEnabled("finance") || settings.overdueDebt === false ? [] : finance.rows.filter((item) => item.overdue > 0);
+  const failed = !isEnabled("delivery") || settings.failedDelivery === false ? [] : db.deliveries.filter((item) => item.status === "FAILED");
+  const todayOrders = !isEnabled("sales") || settings.newOrder === false ? [] : db.orders.filter((item) => item.date === today);
+  const todayPayments = !isEnabled("finance") || settings.payment === false ? [] : db.payments.filter((item) => item.date === today);
   const items = [];
   const userRoles = new Set(user?.roles || [user?.role].filter(Boolean));
   const workflow = (db.workflowNotifications || []).filter((item) => {
+    const targetAllowed = !item.actionPath || (isEnabled(getRouteModule(item.actionPath)) && can(getRoutePermission(item.actionPath)));
+    if (!targetAllowed) return false;
     if (item.userId) return item.userId === user?.id;
     return !item.role || userRoles.has(item.role);
   }).slice(0, 12);
@@ -65,7 +72,7 @@ function NotificationsPage() {
     description: `${todayPayments.length} ta to‘lov · ${formatMoney(todayPayments.filter((item) => item.status === "CONFIRMED").reduce((sum, item) => sum + Number(item.amount || 0), 0))}`,
     icon: <WalletCards size={17} />,
   });
-  const onRoad = db.deliveries.filter((item) => item.status === "OUT_FOR_DELIVERY").length;
+  const onRoad = isEnabled("delivery") ? db.deliveries.filter((item) => item.status === "OUT_FOR_DELIVERY").length : 0;
   if (onRoad) items.push({
     key: "road",
     title: "Yo‘ldagi yetkazib berishlar",

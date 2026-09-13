@@ -5,7 +5,8 @@ import { useState } from "react";
 
 import SmartTablePage from "../components/prototype/SmartTablePage";
 import { Field, Modal, PageShell, PrimaryButton, SecondaryButton, SectionCard, StatusPill } from "../components/prototype/PrototypeUI";
-import { addLocalRecord, makeId, useLocalDb } from "../services/localDb";
+import { useLocalDb } from "../services/localDb";
+import { apiRequest } from "../services/authService";
 import { getOperationalAgents } from "../services/employeeSelectors";
 import { notify } from "../services/notify";
 import { completeDelivery, completePartialDelivery, failDelivery } from "../services/prototypeActions";
@@ -22,10 +23,11 @@ export function ContactsPage() {
     typeLabel: item.partnerType === "CUSTOMER" ? "Mijoz" : "Yetkazib beruvchi",
   }));
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     if (!form.partnerId || !form.name.trim()) return;
-    addLocalRecord("contacts", { ...form, id: makeId("cnt"), name: form.name.trim(), position: form.position.trim(), phone: form.phone.trim() });
+    try { const root = form.partnerType === "CUSTOMER" ? "customers" : "suppliers"; await apiRequest({ url: `/${root}/${form.partnerId}/contacts`, body: { name: form.name.trim(), position: form.position.trim() || undefined, phone: form.phone.trim() || undefined } }); }
+    catch (error) { notify(error.message, "danger"); return; }
     setForm({ partnerType: "CUSTOMER", partnerId: "", name: "", position: "", phone: "" });
     setOpen(false);
     notify("Kontakt saqlandi");
@@ -156,18 +158,18 @@ export function DeliveriesPage() {
     );
   };
 
-  const submitAction = () => {
+  const submitAction = async () => {
     let result;
     if (mode === "partial") {
-      result = completePartialDelivery(
+      result = await completePartialDelivery(
         selectedDeliveryId,
-        remainingItems.map((line) => ({ productId: line.productId, quantity: Number(partialItems[line.productId] || 0) })),
+        remainingItems.map((line) => ({ orderItemId: line.id, quantity: Number(partialItems[line.productId] || 0) })).filter((line) => line.quantity > 0),
         proof,
       );
     } else if (mode === "failed") {
-      result = failDelivery(selectedDeliveryId, failureReason);
+      result = await failDelivery(selectedDeliveryId, failureReason);
     } else {
-      result = completeDelivery(selectedDeliveryId, proof);
+      result = await completeDelivery(selectedDeliveryId, proof);
     }
     notify(result.message, result.ok ? "success" : "danger");
     if (result.ok) closeModal();

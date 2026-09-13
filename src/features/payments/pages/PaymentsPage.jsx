@@ -32,7 +32,7 @@ function PaymentsPage() {
     ...item,
     customer: item.customerId ? getName(db.customers, item.customerId) : "Anonim mijoz",
     invoice: item.allocations?.length ? `${item.allocations.length} ta faktura` : db.invoices.find((invoice) => invoice.id === item.invoiceId)?.number || "—",
-    methodLabel: getPaymentMethodLabel(item.method),
+    methodLabel: getPaymentMethodLabel(item.method, db.paymentMethods),
   }));
   const today = new Date().toISOString().slice(0, 10);
   const todayTotal = db.payments.filter((item) => item.date === today && item.status === "CONFIRMED").reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -42,15 +42,15 @@ function PaymentsPage() {
   const selectedDebt = selectedCustomer ? getCustomerDebt(db, selectedCustomer.id) : 0;
   const selectedAdvance = selectedCustomer ? getCustomerAdvance(db, selectedCustomer.id) : 0;
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
-    const result = collectPayment(form);
+    const result = await collectPayment(form);
     setMessage(result.message);
     notify(result.message || (result.ok ? "To‘lov qabul qilindi" : "To‘lovni qabul qilib bo‘lmadi"), result.ok ? "success" : "danger");
     if (result.ok) { setOpen(false); setForm({ customerId: "", amount: "", method: "CASH" }); }
   };
 
-  const approve = (id) => { const result = approvePayment(id); notify(result.message, result.ok ? "success" : "danger"); };
+  const approve = async (id) => { const result = await approvePayment(id); notify(result.message, result.ok ? "success" : "danger"); };
 
   return <>
     <SmartTablePage
@@ -81,7 +81,7 @@ function PaymentsPage() {
 
     <Modal open={open} title="To‘lov qabul qilish" description="Mijoz qarzi va ochiq fakturalar bir joyda. Qulay summani eng eski ochiq fakturadan boshlab taqsimlaydi." onClose={() => setOpen(false)} wide>
       <form onSubmit={submit}>
-        <div className="qp-form-grid"><Field label="Mijoz"><Select searchable value={form.customerId} onChange={(event) => setForm({ ...form, customerId: event.target.value })}><option value="">Tanlang</option>{db.customers.map((item) => <option key={item.id} value={item.id}>{item.name} — qarz {formatMoney(getCustomerDebt(db, item.id))}</option>)}</Select></Field><Field label="Summa"><input className="qp-input" type="number" min="1" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></Field><Field label="To‘lov usuli"><Select value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value })}><option value="CASH">Naqd</option><option value="CARD">Karta</option><option value="BANK">Bank o‘tkazmasi</option></Select></Field></div>
+        <div className="qp-form-grid"><Field label="Mijoz"><Select searchable value={form.customerId} onChange={(event) => setForm({ ...form, customerId: event.target.value })}><option value="">Tanlang</option>{db.customers.map((item) => <option key={item.id} value={item.id}>{item.name} — qarz {formatMoney(getCustomerDebt(db, item.id))}</option>)}</Select></Field><Field label="Summa"><input className="qp-input" type="number" min="1" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></Field><Field label="To‘lov usuli"><Select value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value })}>{(db.paymentMethods || []).filter((item)=>item.status === "ACTIVE").map((item)=><option key={item.id} value={item.code}>{item.name}</option>)}</Select></Field></div>
 
         {selectedCustomer ? <div className="qp-payment-customer-summary"><div><span>Joriy qarz</span><strong>{formatMoney(selectedDebt)}</strong></div><div><span>Avans</span><strong>{formatMoney(selectedAdvance)}</strong></div><div><span>Kredit limiti</span><strong>{formatMoney(selectedCustomer.creditLimit || 0)}</strong></div><div><span>Ochiq faktura</span><strong>{openInvoices.length} ta</strong></div></div> : null}
 

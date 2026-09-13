@@ -20,19 +20,19 @@ function StockAdjustmentsPage() {
     warehouse: getName(db.warehouses, item.warehouseId),
   }));
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     if (!form.productId || !Number(form.quantity)) {
       notify("Mahsulot va miqdorni kiriting", "warning");
       return;
     }
-    const result = createStockAdjustment(form);
+    const result = await createStockAdjustment(form);
     notify(result.message, result.ok ? "success" : "danger");
     if (result.ok) setOpen(false);
   };
 
-  const approve = (id) => {
-    const result = approveStockAdjustment(id);
+  const approve = async (id) => {
+    const result = await approveStockAdjustment(id);
     notify(result.message, result.ok ? "success" : "danger");
   };
 

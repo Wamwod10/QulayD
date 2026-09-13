@@ -61,10 +61,14 @@ export function generateUniqueSku(products = [], excludeProductId = "") {
       .filter(Boolean),
   );
   for (let attempt = 0; attempt < 1000; attempt += 1) {
-    const candidate = `SKU-${randomDigits(6)}`;
+    const candidate = randomDigits(5);
     if (!existing.has(candidate)) return candidate;
   }
-  return `SKU-${Date.now().toString().slice(-8)}`;
+  for (let value = 0; value < 100000; value += 1) {
+    const candidate = String(value).padStart(5, "0");
+    if (!existing.has(candidate)) return candidate;
+  }
+  throw new Error("Barcha 5 xonali SKU qiymatlari band");
 }
 
 export function generateUniqueEan13(products = [], excludeProductId = "") {
@@ -79,10 +83,9 @@ export function generateUniqueEan13(products = [], excludeProductId = "") {
 }
 
 export function createProductIdentity(products = [], excludeProductId = "") {
-  const barcode = generateUniqueEan13(products, excludeProductId);
   return {
     sku: generateUniqueSku(products, excludeProductId),
-    barcode,
-    barcodes: [barcode],
+    barcode: "",
+    barcodes: [""],
   };
 }

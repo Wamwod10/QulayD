@@ -5,8 +5,8 @@ import LocationPicker from "../../../components/maps/LocationPicker";
 import RowActions from "../../../components/prototype/RowActions";
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import { Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
-import { addLocalRecord, removeLocalRecord, updateLocalRecord, useLocalDb } from "../../../services/localDb";
-import { getActiveCompanyId, getCompanyPlanLimits } from "../../../services/authService";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 
 const blank = { name: "", branch: "Bosh filial", address: "", latitude: null, longitude: null };
@@ -24,24 +24,21 @@ function WarehousesPage() {
 
   const startCreate = () => { setEditingId(""); setForm(blank); setOpen(true); };
   const startEdit = (row) => { setEditingId(row.id); setForm({ name: row.name || "", branch: row.branch || "Bosh filial", address: row.address || "", latitude: row.latitude || null, longitude: row.longitude || null }); setOpen(true); };
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault(); if (!form.name.trim()) { notify("Ombor nomini kiriting", "warning"); return; }
-    const payload = { name: form.name.trim(), branch: form.branch.trim() || "Bosh filial", address: form.address.trim(), latitude: Number(form.latitude) || null, longitude: Number(form.longitude) || null };
-    if (editingId) { updateLocalRecord("warehouses", editingId, payload); notify("Ombor yangilandi"); }
+    const payload = { name: form.name.trim(), branchId: db.branches?.find((item) => item.name === form.branch)?.id || db.branches?.[0]?.id || null, address: form.address.trim() || undefined, latitude: Number(form.latitude) || undefined, longitude: Number(form.longitude) || undefined };
+    if (editingId) { await apiRequest({ url: `/inventory/warehouses/${editingId}`, method: "PATCH", body: payload }); notify("Ombor yangilandi"); }
     else {
-      const limit = Number(getCompanyPlanLimits(getActiveCompanyId())?.warehouses || 0);
-      const activeCount = db.warehouses.filter((item) => item.status !== "DELETED").length;
-      if (limit && activeCount >= limit) { notify(`Tarif bo‘yicha omborlar limiti ${limit} ta. Super Admin orqali limit yoki tarifni oshiring.`, "warning"); return; }
-      addLocalRecord("warehouses", { ...payload, status: "ACTIVE" }); notify("Ombor qo‘shildi");
+      await apiRequest({ url: "/inventory/warehouses", body: { ...payload, code: `WH-${Date.now().toString(36).toUpperCase()}`, status: "ACTIVE" } }); notify("Ombor qo‘shildi");
     }
     setOpen(false);
   };
-  const toggleStatus = (row) => { const next = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE"; updateLocalRecord("warehouses", row.id, { status: next }); notify(next === "ACTIVE" ? "Ombor faollashtirildi" : "Ombor arxivlandi"); };
-  const removeWarehouse = (row) => {
+  const toggleStatus = async (row) => { const next = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE"; await apiRequest({ url: `/inventory/warehouses/${row.id}`, method: "PATCH", body: { status: next } }); notify(next === "ACTIVE" ? "Ombor faollashtirildi" : "Ombor arxivlandi"); };
+  const removeWarehouse = async (row) => {
     const hasHistory = db.balances.some((item) => item.warehouseId === row.id) || db.movements.some((item) => item.warehouseId === row.id) || db.orders.some((item) => item.warehouseId === row.id);
     if (hasHistory) { notify("Bu omborda qoldiq yoki tarixiy hujjatlar bor. O‘chirish o‘rniga faolsizlantiring.", "warning"); return; }
     if (!window.confirm(`“${row.name}” ombori butunlay o‘chirilsinmi?`)) return;
-    removeLocalRecord("warehouses", row.id); notify("Ombor o‘chirildi", "warning");
+    await apiRequest({ url: `/inventory/warehouses/${row.id}`, method: "DELETE" }); notify("Ombor o‘chirildi", "warning");
   };
 
   return <>

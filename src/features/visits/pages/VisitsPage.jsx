@@ -11,15 +11,13 @@ import {
   StatusPill,
 } from "../../../components/prototype/PrototypeUI";
 import {
-  addLocalRecord,
-  makeId,
-  updateLocalRecord,
   useLocalDb,
 } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { getOperationalAgents } from "../../../services/employeeSelectors";
 import { notify } from "../../../services/notify";
 import { collectPayment } from "../../../services/prototypeActions";
-import { formatMoney, formatTime, getName, shortDate } from "../../../utils/formatters";
+import { formatMoney, getName, shortDate } from "../../../utils/formatters";
 import { getLabel } from "../../../utils/labels";
 
 
@@ -81,24 +79,12 @@ function VisitsPage() {
     resultLabel: getLabel(item.result, item.status === "IN_PROGRESS" ? "Jarayonda" : "—"),
   }));
 
-  const createQuickCustomer = () => {
+  const createQuickCustomer = async () => {
     if (!customerForm.name.trim()) {
       notify("Mijoz nomini kiriting", "warning");
       return;
     }
-    const customer = {
-      id: makeId("cus"),
-      name: customerForm.name.trim(),
-      phone: customerForm.phone.trim(),
-      address: customerForm.address.trim(),
-      territory: "",
-      priceListId: "pl-retail",
-      agentId: startForm.agentId,
-      debt: 0,
-      creditLimit: 0,
-      status: "ACTIVE",
-    };
-    addLocalRecord("customers", customer);
+    const customer = await apiRequest({ url: "/customers", body: { code: `CUS-${Date.now().toString(36).toUpperCase()}`, name: customerForm.name.trim(), phone: customerForm.phone.trim() || undefined, address: customerForm.address.trim() || undefined, status: "ACTIVE", metadata: { agentId: startForm.agentId } } });
     setStartForm((current) => ({ ...current, customerId: customer.id }));
     setCustomerForm({ name: "", phone: "", address: "" });
     setCreatingCustomer(false);
@@ -115,17 +101,9 @@ function VisitsPage() {
       const gps = db.settings.agents.requireGpsCheckIn ? await getGps() : {};
       const geofence = validateVisitGeofence(db, startForm.customerId, gps);
       if (!geofence.ok) { notify(`Mijoz joylashuvidan ${Math.round(geofence.distance)} m uzoqdasiz. Ruxsat etilgan masofa ${geofence.limit} m.`, "danger"); return; }
-      addLocalRecord("visits", {
-        id: makeId("vis"),
-        date: new Date().toISOString().slice(0, 10),
-        agentId: startForm.agentId,
-        customerId: startForm.customerId,
-        status: "IN_PROGRESS",
-        checkIn: formatTime(),
-        checkOut: "",
-        result: "",
-        checkInLocation: gps,
-      });
+      const visit = await apiRequest({ url: "/visits", body: { employeeId: startForm.agentId, customerId: startForm.customerId } });
+      const customer = db.customers.find((item) => item.id === startForm.customerId);
+      await apiRequest({ url: `/visits/${visit.id}/check-in`, body: { latitude: Number(gps.latitude ?? customer?.latitude ?? 0), longitude: Number(gps.longitude ?? customer?.longitude ?? 0) } });
       setStartOpen(false);
       notify("Tashrif boshlandi");
     } catch (error) {
@@ -148,7 +126,7 @@ function VisitsPage() {
           notify("Agent uchun to‘lov qabul qilish o‘chirilgan", "danger");
           return;
         }
-        const result = collectPayment({
+        const result = await collectPayment({
           customerId: visit.customerId,
           amount: Number(finishForm.amount),
           method: finishForm.method,
@@ -158,13 +136,8 @@ function VisitsPage() {
           return;
         }
       }
-      updateLocalRecord("visits", visit.id, {
-        status: "COMPLETED",
-        checkOut: formatTime(),
-        result: finishForm.result,
-        note: finishForm.note.trim(),
-        checkOutLocation: gps,
-      });
+      const customer = db.customers.find((item) => item.id === visit.customerId);
+      await apiRequest({ url: `/visits/${visit.id}/check-out`, body: { latitude: Number(gps.latitude ?? customer?.latitude ?? 0), longitude: Number(gps.longitude ?? customer?.longitude ?? 0), note: [finishForm.result, finishForm.note.trim()].filter(Boolean).join(": ") } });
       setFinishVisitId("");
       setFinishForm({ result: "NO_ORDER", amount: "", method: "CASH", note: "" });
       notify("Tashrif yakunlandi");
@@ -250,7 +223,7 @@ function VisitsPage() {
           {finishForm.result === "PAYMENT_COLLECTED" ? (
             <div className="qp-form-grid">
               <Field label="To‘lov summasi"><input className="qp-input" type="number" min="1" value={finishForm.amount} onChange={(event) => setFinishForm({ ...finishForm, amount: event.target.value })} /></Field>
-              <Field label="To‘lov usuli"><Select value={finishForm.method} onChange={(event) => setFinishForm({ ...finishForm, method: event.target.value })}><option value="CASH">Naqd</option><option value="CARD">Karta</option><option value="BANK">Bank o‘tkazmasi</option></Select></Field>
+              <Field label="To‘lov usuli"><Select value={finishForm.method} onChange={(event) => setFinishForm({ ...finishForm, method: event.target.value })}>{(db.paymentMethods || []).filter((item)=>item.status === "ACTIVE").map((item)=><option key={item.id} value={item.code}>{item.name}</option>)}</Select></Field>
               <div className="qp-muted">Mijoz qarzi: {formatMoney(db.customers.find((item) => item.id === db.visits.find((visit) => visit.id === finishVisitId)?.customerId)?.debt || 0)}</div>
             </div>
           ) : null}

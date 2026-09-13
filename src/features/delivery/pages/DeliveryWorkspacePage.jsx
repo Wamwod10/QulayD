@@ -5,7 +5,8 @@ import { useNavigate } from "react-router-dom";
 import NavigationAppModal from "../../../components/maps/NavigationAppModal";
 import YandexMap from "../../../components/maps/YandexMap";
 import { Field, Modal, PageShell, PrimaryButton, SecondaryButton, StatusPill, SummaryGrid } from "../../../components/prototype/PrototypeUI";
-import { updateLocalDb, useLocalDb } from "../../../services/localDb";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { arriveDelivery, completeDelivery, failDelivery } from "../../../services/prototypeActions";
 import { notify } from "../../../services/notify";
 import { formatMoney } from "../../../utils/formatters";
@@ -47,25 +48,16 @@ function DeliveryWorkspacePage() {
   const failed = db.deliveries.filter((delivery) => ["FAILED", "PARTIALLY_DELIVERED"].includes(delivery.status)).length;
   const plannedValue = db.deliveries.filter((delivery) => ["PLANNED", "OUT_FOR_DELIVERY"].includes(delivery.status)).reduce((sum, delivery) => sum + Number(delivery.total || 0), 0);
 
-  const startSelectedDelivery = () => {
+  const startSelectedDelivery = async () => {
     if (!selectedDelivery) return;
-    updateLocalDb((draft) => {
-      const delivery = draft.deliveries.find((item) => item.id === selectedDelivery.id);
-      if (!delivery) return;
-      delivery.status = "OUT_FOR_DELIVERY";
-      delivery.startedAt = new Date().toISOString();
-      const order = draft.orders.find((item) => item.id === delivery.orderId);
-      if (order) order.deliveryStatus = "OUT_FOR_DELIVERY";
-      const trip = draft.deliveryTrips.find((item) => item.id === delivery.tripId);
-      if (trip && trip.status === "PLANNED") { trip.status = "OUT_FOR_DELIVERY"; trip.startedAt = new Date().toISOString(); }
-    });
-    notify("Yetkazib berish boshlandi");
+    try { await apiRequest({ url: `/delivery/trips/${selectedDelivery.tripId}/start`, body: {} }); notify("Yetkazib berish boshlandi"); }
+    catch (error) { notify(error.message, "danger"); }
   };
-  const arriveSelected = () => { if (!selectedDelivery) return; const result = arriveDelivery(selectedDelivery.id); notify(result?.message || "Manzilga yetib kelindi", result?.ok === false ? "warning" : "success"); };
-  const completeSelected = () => { if (!selectedDelivery) return; const result = completeDelivery(selectedDelivery.id, { recipientName: "Owner tasdiqladi" }); notify(result?.message || "Yetkazildi", result?.ok === false ? "warning" : "success"); };
-  const failSelected = () => {
+  const arriveSelected = async () => { if (!selectedDelivery) return; const result = await arriveDelivery(selectedDelivery.id); notify(result?.message || "Manzilga yetib kelindi", result?.ok === false ? "warning" : "success"); };
+  const completeSelected = async () => { if (!selectedDelivery) return; const result = await completeDelivery(selectedDelivery.id, { recipientName: "Owner tasdiqladi" }); notify(result?.message || "Yetkazildi", result?.ok === false ? "warning" : "success"); };
+  const failSelected = async () => {
     if (!selectedDelivery || !failureReason.trim()) { notify("Muammo sababini kiriting", "warning"); return; }
-    const result = failDelivery(selectedDelivery.id, failureReason.trim());
+    const result = await failDelivery(selectedDelivery.id, failureReason.trim());
     notify(result?.message || "Muammo qayd etildi", result?.ok === false ? "warning" : "success");
     if (result?.ok !== false) { setFailureOpen(false); setFailureReason(""); }
   };

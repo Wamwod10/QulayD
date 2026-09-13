@@ -1,6 +1,6 @@
 export const ROUTES = Object.freeze({
   dashboard: '/',
-  products: '/products',
+  products: '/inventory/products',
   inventory: '/inventory',
   customers: '/customers',
   orders: '/orders',

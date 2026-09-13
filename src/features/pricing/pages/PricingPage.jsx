@@ -3,12 +3,14 @@ import { useState } from "react";
 
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import { Field, Modal, PrimaryButton, SecondaryButton } from "../../../components/prototype/PrototypeUI";
-import { updateLocalRecord, useLocalDb } from "../../../services/localDb";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 import { formatMoney } from "../../../utils/formatters";
 
 function PricingPage() {
-  const products = useLocalDb((db) => db.products);
+  const db = useLocalDb();
+  const products = db.products;
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ price: 0, wholesalePrice: 0 });
 
@@ -17,16 +19,17 @@ function PricingPage() {
     setForm({ price: Number(product.price || 0), wholesalePrice: Number(product.wholesalePrice || 0) });
   };
 
-  const save = (event) => {
+  const save = async (event) => {
     event.preventDefault();
     if (!editing) return;
     const price = Math.max(0, Number(form.price) || 0);
     const wholesalePrice = Math.max(0, Number(form.wholesalePrice) || 0);
     if (wholesalePrice > price && price > 0) {
-      notify("Ulgurji narx chakana narxdan yuqori kiritildi. Qiymatni tekshiring.", "warning");
+      notify("Tannarx sotuv narxidan yuqori kiritildi. Qiymatni tekshiring.", "warning");
       return;
     }
-    updateLocalRecord("products", editing.id, { price, wholesalePrice });
+    try { await apiRequest({ url: `/catalog/products/${editing.id}`, method: "PATCH", body: { prices: db.priceLists.slice(0, 2).map((list, index) => ({ priceListId: list.id, price: index ? wholesalePrice : price })) } }); }
+    catch (error) { notify(error.message, "danger"); return; }
     notify(`${editing.name} narxlari yangilandi`);
     setEditing(null);
   };
@@ -36,21 +39,21 @@ function PricingPage() {
       <SmartTablePage
         title="Narxlar"
         description="Mahsulot narxlarini bir joyda ko‘ring va tezkor yangilang. O‘zgarishlar kassa hamda buyurtmalarga darhol ta’sir qiladi."
-        eyebrow="Katalog"
+        eyebrow="Ombor"
         rows={products}
         searchFields={["name", "sku"]}
         columns={[
           { key: "name", label: "Mahsulot", render: (row) => <div><strong>{row.name}</strong><div className="qp-muted">SKU {row.sku}</div></div> },
-          { key: "price", label: "Chakana", render: (row) => <strong>{formatMoney(row.price)}</strong> },
-          { key: "wholesalePrice", label: "Ulgurji", render: (row) => formatMoney(row.wholesalePrice) },
+          { key: "price", label: "Sotuv narxi", render: (row) => <strong>{formatMoney(row.price)}</strong> },
+          { key: "wholesalePrice", label: "Tannarx", render: (row) => formatMoney(row.wholesalePrice) },
           { key: "actions", label: "Amal", sortable: false, render: (row) => <SecondaryButton onClick={() => openEdit(row)}><Pencil size={14} /> Tahrirlash</SecondaryButton> },
         ]}
       />
       <Modal open={Boolean(editing)} title="Narxlarni yangilash" description={editing?.name || ""} onClose={() => setEditing(null)}>
         <form onSubmit={save} className="qp-stack">
           <div className="qp-form-grid">
-            <Field label="Chakana narx"><input className="qp-input" type="number" min="0" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></Field>
-            <Field label="Ulgurji narx"><input className="qp-input" type="number" min="0" value={form.wholesalePrice} onChange={(event) => setForm({ ...form, wholesalePrice: event.target.value })} /></Field>
+            <Field label="Sotuv narxi"><input className="qp-input" type="number" min="0" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></Field>
+            <Field label="Tannarx"><input className="qp-input" type="number" min="0" value={form.wholesalePrice} onChange={(event) => setForm({ ...form, wholesalePrice: event.target.value })} /></Field>
           </div>
           <div className="qp-form-actions"><SecondaryButton type="button" onClick={() => setEditing(null)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit">Narxlarni saqlash</PrimaryButton></div>
         </form>

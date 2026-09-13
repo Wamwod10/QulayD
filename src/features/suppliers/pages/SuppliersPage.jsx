@@ -6,6 +6,7 @@ import { Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../
 import ImageUploader from "../../../components/ui/ImageUploader";
 import { createSupplier } from "../../../services/prototypeActions";
 import { useLocalDb } from "../../../services/localDb";
+import { notify } from "../../../services/notify";
 
 const emptyForm = { name: "", phone: "", contact: "", image: "" };
 
@@ -13,7 +14,7 @@ function SuppliersPage() {
   const suppliers = useLocalDb((db) => db.suppliers);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const submit = (event) => { event.preventDefault(); if (!form.name.trim()) return; createSupplier(form); setForm(emptyForm); setOpen(false); };
+  const submit = async (event) => { event.preventDefault(); if (!form.name.trim()) return; const result = await createSupplier(form); notify(result.message, result.ok ? "success" : "danger"); if (result.ok) { setForm(emptyForm); setOpen(false); } };
   return <>
     <SmartTablePage title="Yetkazib beruvchilar" description="Kirim va kelajakdagi xarid moduli foydalanadigan yetkazib beruvchilar bazasi." eyebrow="Hamkorlar" rows={suppliers} searchFields={["name", "phone", "contact"]} actions={<PrimaryButton onClick={() => setOpen(true)}><Plus size={15} /> Yetkazib beruvchi</PrimaryButton>} columns={[
       { key: "name", label: "Nomi", render: (row) => <div className="qp-product-name-cell">{row.image ? <img src={row.image} alt=""/> : <span>{row.name.slice(0,1).toUpperCase()}</span>}<div><strong>{row.name}</strong><div className="qp-muted">{row.contact || "Aloqa shaxsi yo‘q"}</div></div></div> },

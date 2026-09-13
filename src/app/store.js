@@ -1,15 +1,14 @@
 import { configureStore } from "@reduxjs/toolkit";
-
-const rootReducer = (state = {}) => state;
+import { baseApi } from "../services/baseApi";
 
 export const store = configureStore({
-  reducer: rootReducer,
+  reducer: { [baseApi.reducerPath]: baseApi.reducer },
 
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: true,
       immutableCheck: true,
-    }),
+    }).concat(baseApi.middleware),
 
   devTools: import.meta.env.DEV,
 });

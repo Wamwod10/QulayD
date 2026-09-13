@@ -2,7 +2,8 @@ import { Plus } from "lucide-react";
 
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import { PrimaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
-import { addLocalRecord, nextNumber, useLocalDb } from "../../../services/localDb";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 import { formatMoney, getName, shortDate } from "../../../utils/formatters";
 
@@ -10,16 +11,14 @@ function ReturnsPage() {
   const db = useLocalDb();
   const rows = db.returns.map((item) => ({ ...item, customer: getName(db.customers, item.customerId) }));
 
-  const quickCreate = () => {
-    const customer = db.customers[0];
-    const sale = db.sales[0];
-    if (!customer || !sale) {
-      notify("Qaytarish yaratish uchun mijoz va sotuv kerak", "warning");
+  const quickCreate = async () => {
+    const order = db.orders.find((item) => item.status === "COMPLETED" && item.items?.length);
+    if (!order) {
+      notify("Qaytarish yaratish uchun yakunlangan buyurtma kerak", "warning");
       return;
     }
-    const number = nextNumber(db.settings.documents.returnPrefix || "RET", db.returns);
-    addLocalRecord("returns", { number, date: new Date().toISOString().slice(0, 10), customerId: customer.id, saleId: sale.id, total: 0, status: "DRAFT" });
-    notify(`${number} qoralama qaytarish yaratildi`);
+    try { const created = await apiRequest({ url: "/returns", body: { orderId: order.id, reason: "Mijoz qaytarishi", items: [{ orderItemId: order.items[0].id, quantity: 1 }] } }); notify(`${created.number} qaytarish yaratildi`); }
+    catch (error) { notify(error.message, "danger"); }
   };
 
   return (

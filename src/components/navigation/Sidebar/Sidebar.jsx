@@ -8,7 +8,6 @@ import {
   CreditCard,
   CircleHelp,
   LayoutDashboard,
-  Package,
   Route,
   Settings,
   ShoppingCart,
@@ -19,8 +18,9 @@ import {
   X,
 } from "lucide-react";
 
-import { findNavigationPage, getNavigationDefaultPath, navigationConfig } from "../../../app/navigationConfig";
+import { findNavigationPage, getNavigationDefaultPath, getRoutePermission, navigationConfig } from "../../../app/navigationConfig";
 import { useModuleAccess } from "../../../hooks/useModuleAccess";
+import { usePermissions } from "../../../hooks/usePermissions";
 import { openPosWorkspace } from "../../../utils/pwa";
 import styles from "./Sidebar.module.scss";
 
@@ -28,7 +28,6 @@ const icons = {
   dashboard: LayoutDashboard,
   operations: Workflow,
   sales: ShoppingCart,
-  catalog: Package,
   inventory: Warehouse,
   partners: Building2,
   agents: Users,
@@ -45,6 +44,7 @@ function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen = false, onCloseM
   const location = useLocation();
   const navigate = useNavigate();
   const { isEnabled } = useModuleAccess();
+  const { can } = usePermissions();
   const [hoveredKey, setHoveredKey] = useState(null);
   const closeTimerRef = useRef(null);
   const showLabels = !isCollapsed || isMobileOpen;
@@ -53,13 +53,13 @@ function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen = false, onCloseM
     () => navigationConfig
       .map((item) => {
         if (item.key === "sales") {
-          const children = item.children.filter((child) => child.to !== "/sales/pos" || isEnabled("pos"));
+          const children = item.children.filter((child) => (child.to !== "/sales/pos" || isEnabled("pos")) && can(getRoutePermission(child.to)));
           return { ...item, children };
         }
-        return item;
+        return item.children ? { ...item, children: item.children.filter((child) => can(getRoutePermission(child.to))) } : item;
       })
-      .filter((item) => isEnabled(item.key)),
-    [isEnabled],
+      .filter((item) => isEnabled(item.key) && (!item.children || item.children.length)),
+    [can, isEnabled],
   );
 
   const activeFlyout = useMemo(
@@ -163,6 +163,10 @@ function Sidebar({ isCollapsed, onToggleCollapse, isMobileOpen = false, onCloseM
                     onMouseLeave={() => scheduleClose(430)}
                     onFocus={() => openFlyout(item.key)}
                     onClick={() => {
+                      if (isMobileOpen) {
+                        setHoveredKey(item.key);
+                        return;
+                      }
                       const target = getNavigationDefaultPath(item);
                       if (target === "/sales/pos") openPosWorkspace(navigate);
                       else navigate(target);

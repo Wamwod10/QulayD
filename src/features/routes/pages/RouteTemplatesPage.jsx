@@ -5,7 +5,8 @@ import { useState } from "react";
 
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import { Field, Modal, PrimaryButton, SecondaryButton } from "../../../components/prototype/PrototypeUI";
-import { addLocalRecord, useLocalDb } from "../../../services/localDb";
+import { useLocalDb } from "../../../services/localDb";
+import { apiRequest } from "../../../services/authService";
 import { getOperationalAgents } from "../../../services/employeeSelectors";
 import { notify } from "../../../services/notify";
 import { getName } from "../../../utils/formatters";
@@ -26,13 +27,14 @@ function RouteTemplatesPage() {
     }));
   };
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     if (!form.name.trim() || !form.agentId || !form.stops.length) {
       notify("Shablon nomi, agent va kamida bitta mijozni tanlang", "warning");
       return;
     }
-    addLocalRecord("routeTemplates", { ...form, name: form.name.trim() });
+    try { await apiRequest({ url: "/routes/templates", body: { name: form.name.trim(), dayOfWeek: days.indexOf(form.day) + 1, agentId: form.agentId, status: "ACTIVE", stops: form.stops.map((customerId, index) => ({ customerId, stopOrder: index + 1 })) } }); }
+    catch (error) { notify(error.message, "danger"); return; }
     setOpen(false);
     setForm({ name: "", day: "Dushanba", agentId: operationalAgents[0]?.id || "", stops: [] });
     notify("Marshrut shabloni yaratildi");

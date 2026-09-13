@@ -1,9 +1,11 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
+import { getRouteModule, getRoutePermission } from "./navigationConfig";
 
 import AgentsPage from "../features/agents/pages/AgentsPage";
 import ChangePasswordPage from "../features/auth/pages/ChangePasswordPage";
 import LoginPage from "../features/auth/pages/LoginPage";
 import RegisterPage from "../features/auth/pages/RegisterPage";
+import PasswordRecoveryPage from "../features/auth/pages/PasswordRecoveryPage";
 import CategoriesPage from "../features/categories/pages/CategoriesPage";
 import HelpCenterPage from "../features/help/pages/HelpCenterPage";
 import LiveOperationsPage from "../features/operations/pages/LiveOperationsPage";
@@ -41,7 +43,6 @@ import RouteTemplatesPage from "../features/routes/pages/RouteTemplatesPage";
 import SalesPage from "../features/sales/pages/SalesPage";
 import SettingsPage from "../features/settings/pages/SettingsPage";
 import SuppliersPage from "../features/suppliers/pages/SuppliersPage";
-import { SuperAdminLayout, SuperAdminPage } from "../features/super-admin";
 import UnitsPage from "../features/units/pages/UnitsPage";
 import UsersPage from "../features/users/pages/UsersPage";
 import UserDetailsPage from "../features/users/pages/UserDetailsPage";
@@ -75,8 +76,8 @@ import {
 import ForbiddenPage from "../pages/ForbiddenPage";
 import HomeRedirect from "../pages/HomeRedirect";
 
-const settingSections = ["general", "appearance", "modules", "sales", "pos", "inventory", "agents", "delivery", "finance", "documents", "notifications", "maps", "locale", "mobile", "data", "system"];
-const ownerRoles = ["OWNER", "ADMIN"];
+const settingSections = ["general", "appearance", "modules", "sales", "pos", "payment-methods", "inventory", "agents", "delivery", "finance", "documents", "notifications", "maps", "locale", "mobile", "data", "system"];
+const platformRoles = ["OWNER", "ADMIN", "EMPLOYEE"];
 
 const ownerChildren = [
   { index: true, element: <Navigate to="/dashboard" replace /> },
@@ -86,11 +87,9 @@ const ownerChildren = [
   { path: "orders/new", element: <OrderCreatePage /> },
   { path: "sales", element: <SalesPage /> },
   { path: "returns", element: <ReturnsPage /> },
-  { path: "products", element: <ProductsPage /> },
-  { path: "categories", element: <CategoriesPage /> },
-  { path: "units", element: <UnitsPage /> },
-  { path: "pricing", element: <PricingPage /> },
-  { path: "price-lists", element: <PriceListsPage /> },
+  { path: "inventory/products", element: <ProductsPage /> },
+  { path: "inventory/categories", element: <CategoriesPage /> },
+  { path: "inventory/pricing", element: <PricingPage /> },
   { path: "inventory", element: <InventoryPage /> },
   { path: "inventory/receipts", element: <GoodsReceiptsPage /> },
   { path: "inventory/movements", element: <InventoryMovementsPage /> },
@@ -133,7 +132,20 @@ const ownerChildren = [
   { path: "help", element: <HelpCenterPage /> },
   { path: "help/:articleId", element: <HelpCenterPage /> },
   { path: "settings", element: <Navigate to="/settings/general" replace /> },
+  { path: "settings/units", element: <UnitsPage /> },
+  { path: "settings/price-lists", element: <PriceListsPage /> },
   ...settingSections.map((section) => ({ path: `settings/${section}`, element: <SettingsPage section={section} /> })),
+  { path: "products", element: <Navigate to="/inventory/products" replace /> },
+  { path: "categories", element: <Navigate to="/inventory/categories" replace /> },
+  { path: "pricing", element: <Navigate to="/inventory/pricing" replace /> },
+  { path: "units", element: <Navigate to="/settings/units" replace /> },
+  { path: "price-lists", element: <Navigate to="/settings/price-lists" replace /> },
+  { path: "catalog", element: <Navigate to="/inventory/products" replace /> },
+  { path: "catalog/products", element: <Navigate to="/inventory/products" replace /> },
+  { path: "catalog/categories", element: <Navigate to="/inventory/categories" replace /> },
+  { path: "catalog/pricing", element: <Navigate to="/inventory/pricing" replace /> },
+  { path: "catalog/units", element: <Navigate to="/settings/units" replace /> },
+  { path: "catalog/price-lists", element: <Navigate to="/settings/price-lists" replace /> },
   { path: "users", element: <UsersPage /> },
   { path: "users/:userId", element: <UserDetailsPage /> },
   { path: "notifications", element: <NotificationsPage /> },
@@ -144,51 +156,11 @@ const ownerChildren = [
 ];
 
 
-const routeModule = (path = "") => {
-  if (path === "dashboard" || path === "operations") return "dashboard";
-  if (path === "sales/pos") return "pos";
-  if (["orders", "orders/new", "sales", "returns"].includes(path)) return "sales";
-  if (["products", "categories", "units", "pricing", "price-lists"].includes(path)) return "catalog";
-  if (path.startsWith("inventory") || path === "warehouses") return "inventory";
-  if (["customers", "suppliers", "partners/contacts"].includes(path)) return "partners";
-  if (path.startsWith("agents") || path === "visits") return "agents";
-  if (path.startsWith("routes")) return "routes";
-  if (path.startsWith("fulfillment")) return "fulfillment";
-  if (path.startsWith("deliver") || path === "delivery-trips") return "delivery";
-  if (["finance", "invoices", "payments", "debt", "ledger", "currency-rates"].includes(path)) return "finance";
-  if (path.startsWith("reports")) return "reports";
-  if (path.startsWith("help")) return "dashboard";
-  return "settings";
-};
-
-const routePermission = (path = "") => {
-  if (path === "operations") return PERMISSIONS.DASHBOARD_VIEW;
-  if (path === "users") return PERMISSIONS.USERS_VIEW;
-  if (path.startsWith("users/")) return PERMISSIONS.USERS_VIEW;
-  if (path.startsWith("settings")) return PERMISSIONS.SETTINGS_MANAGE;
-  if (path.startsWith("reports")) return PERMISSIONS.REPORTS_VIEW;
-  if (path.startsWith("help")) return PERMISSIONS.DASHBOARD_VIEW;
-  if (path === "payments") return PERMISSIONS.PAYMENTS_VIEW;
-  if (["finance", "invoices", "debt", "ledger", "currency-rates"].includes(path)) return PERMISSIONS.FINANCE_VIEW;
-  if (path === "deliveries/planning") return PERMISSIONS.DELIVERY_PLAN;
-  if (path.startsWith("deliver") || path === "delivery-trips") return PERMISSIONS.DELIVERY_VIEW;
-  if (path.startsWith("fulfillment")) return PERMISSIONS.FULFILLMENT_VIEW;
-  if (path === "inventory/receipts") return PERMISSIONS.INVENTORY_RECEIVE;
-  if (path === "inventory/transfers") return PERMISSIONS.INVENTORY_TRANSFER;
-  if (path === "inventory/adjustments") return PERMISSIONS.INVENTORY_ADJUST;
-  if (path.startsWith("inventory") || path === "warehouses") return PERMISSIONS.INVENTORY_VIEW;
-  if (["products", "categories", "units", "pricing", "price-lists"].includes(path)) return PERMISSIONS.PRODUCTS_VIEW;
-  if (path === "orders/new" || path === "sales/pos") return PERMISSIONS.ORDERS_CREATE;
-  if (["orders", "sales", "returns"].includes(path)) return PERMISSIONS.ORDERS_VIEW;
-  if (["customers", "suppliers", "partners/contacts"].includes(path)) return PERMISSIONS.CUSTOMERS_VIEW;
-  return PERMISSIONS.DASHBOARD_VIEW;
-};
-
 const securedOwnerChildren = ownerChildren.map((route) => {
   if (route.index || route.path === "*") return route;
   return {
     ...route,
-    element: <ModuleRoute moduleKey={routeModule(route.path)}><PermissionRoute permission={routePermission(route.path)}>{route.element}</PermissionRoute></ModuleRoute>,
+    element: <ModuleRoute moduleKey={getRouteModule(route.path)}><PermissionRoute permission={getRoutePermission(route.path)}>{route.element}</PermissionRoute></ModuleRoute>,
   };
 });
 
@@ -199,35 +171,18 @@ export const router = createBrowserRouter([
     children: [
       { path: "/login", element: <GuestRoute><LoginPage /></GuestRoute> },
       { path: "/register", element: <GuestRoute><RegisterPage /></GuestRoute> },
+      { path: "/forgot-password", element: <GuestRoute><PasswordRecoveryPage /></GuestRoute> },
+      { path: "/reset-password", element: <GuestRoute><PasswordRecoveryPage reset /></GuestRoute> },
       { path: "/change-password", element: <ProtectedRoute allowTemporaryPassword><ChangePasswordPage /></ProtectedRoute> },
     ],
   },
   {
     path: "/sales/pos",
-    element: <ProtectedRoute allowRoles={ownerRoles}><ModuleRoute moduleKey="pos"><PermissionRoute permission={PERMISSIONS.ORDERS_CREATE}><PosPage /></PermissionRoute></ModuleRoute></ProtectedRoute>,
+    element: <ProtectedRoute allowRoles={platformRoles}><ModuleRoute moduleKey="pos"><PermissionRoute permission={PERMISSIONS.POS_CREATE}><PosPage /></PermissionRoute></ModuleRoute></ProtectedRoute>,
   },
   {
-    element: <ProtectedRoute allowRoles={ownerRoles}><AppLayout /></ProtectedRoute>,
+    element: <ProtectedRoute allowRoles={platformRoles}><AppLayout /></ProtectedRoute>,
     children: securedOwnerChildren,
-  },
-  {
-    path: "/super-admin",
-    element: <ProtectedRoute allowRoles={["SUPER_ADMIN"]}><SuperAdminLayout /></ProtectedRoute>,
-    children: [
-      { index: true, element: <SuperAdminPage section="dashboard" /> },
-      { path: "companies", element: <SuperAdminPage section="companies" /> },
-      { path: "users", element: <SuperAdminPage section="users" /> },
-      { path: "plans", element: <SuperAdminPage section="plans" /> },
-      { path: "modules", element: <SuperAdminPage section="modules" /> },
-      { path: "translations", element: <SuperAdminPage section="translations" /> },
-      { path: "notifications", element: <SuperAdminPage section="notifications" /> },
-      { path: "security", element: <SuperAdminPage section="security" /> },
-      { path: "analytics", element: <SuperAdminPage section="analytics" /> },
-      { path: "integrations", element: <SuperAdminPage section="integrations" /> },
-      { path: "support", element: <SuperAdminPage section="support" /> },
-      { path: "health", element: <SuperAdminPage section="health" /> },
-      { path: "settings", element: <SuperAdminPage section="settings" /> },
-    ],
   },
   { path: "/forbidden", element: <ProtectedRoute allowTemporaryPassword><ForbiddenPage /></ProtectedRoute> },
 ]);

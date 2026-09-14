@@ -9,7 +9,7 @@ import { useLocalDb } from "../../../services/localDb";
 import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 
-const blank = { name: "", branch: "Bosh filial", address: "", latitude: null, longitude: null };
+const blank = { name: "", branchId: "", address: "", latitude: null, longitude: null };
 
 function WarehousesPage() {
   const db = useLocalDb();
@@ -18,15 +18,16 @@ function WarehousesPage() {
   const [form, setForm] = useState(blank);
   const warehouses = useMemo(() => db.warehouses.map((warehouse) => ({
     ...warehouse,
+    branchName: warehouse.branchName || warehouse.branch?.name || "—",
     productsCount: db.balances.filter((balance) => balance.warehouseId === warehouse.id && Number(balance.onHand || 0) !== 0).length,
     onHand: db.balances.filter((balance) => balance.warehouseId === warehouse.id).reduce((sum, balance) => sum + Number(balance.onHand || 0), 0),
   })), [db.balances, db.warehouses]);
 
-  const startCreate = () => { setEditingId(""); setForm(blank); setOpen(true); };
-  const startEdit = (row) => { setEditingId(row.id); setForm({ name: row.name || "", branch: row.branch || "Bosh filial", address: row.address || "", latitude: row.latitude || null, longitude: row.longitude || null }); setOpen(true); };
+  const startCreate = () => { setEditingId(""); setForm({ ...blank, branchId: db.branches?.[0]?.id || "" }); setOpen(true); };
+  const startEdit = (row) => { setEditingId(row.id); setForm({ name: row.name || "", branchId: row.branchId || row.branch?.id || "", address: row.address || "", latitude: row.latitude ?? null, longitude: row.longitude ?? null }); setOpen(true); };
   const submit = async (event) => {
     event.preventDefault(); if (!form.name.trim()) { notify("Ombor nomini kiriting", "warning"); return; }
-    const payload = { name: form.name.trim(), branchId: db.branches?.find((item) => item.name === form.branch)?.id || db.branches?.[0]?.id || null, address: form.address.trim() || undefined, latitude: Number(form.latitude) || undefined, longitude: Number(form.longitude) || undefined };
+    const payload = { name: form.name.trim(), branchId: form.branchId || null, address: form.address.trim() || undefined, latitude: form.latitude === null || form.latitude === "" ? undefined : Number(form.latitude), longitude: form.longitude === null || form.longitude === "" ? undefined : Number(form.longitude) };
     if (editingId) { await apiRequest({ url: `/inventory/warehouses/${editingId}`, method: "PATCH", body: payload }); notify("Ombor yangilandi"); }
     else {
       await apiRequest({ url: "/inventory/warehouses", body: { ...payload, code: `WH-${Date.now().toString(36).toUpperCase()}`, status: "ACTIVE" } }); notify("Ombor qo‘shildi");
@@ -42,15 +43,15 @@ function WarehousesPage() {
   };
 
   return <>
-    <SmartTablePage title="Omborlar" description="Kompaniya omborlari, filial, lokatsiya va joriy mahsulot qoldiqlari." eyebrow="Ombor" rows={warehouses} searchFields={["name", "branch", "address"]} extraSummary={[{ label: "Faol omborlar", value: warehouses.filter((item) => item.status === "ACTIVE").length, hint: "Operatsiyada ishlatiladi" }, { label: "Mahsulot pozitsiyalari", value: warehouses.reduce((sum, item) => sum + item.productsCount, 0), hint: "Qoldig‘i mavjud pozitsiyalar" }, { label: "Jami birlik", value: warehouses.reduce((sum, item) => sum + item.onHand, 0), hint: "Barcha omborlar bo‘yicha" }]} actions={<PrimaryButton onClick={startCreate}><Plus size={15} /> Ombor</PrimaryButton>} columns={[
+    <SmartTablePage title="Omborlar" description="Kompaniya omborlari, filial, lokatsiya va joriy mahsulot qoldiqlari." eyebrow="Ombor" rows={warehouses} searchFields={["name", "branchName", "address"]} extraSummary={[{ label: "Faol omborlar", value: warehouses.filter((item) => item.status === "ACTIVE").length, hint: "Operatsiyada ishlatiladi" }, { label: "Mahsulot pozitsiyalari", value: warehouses.reduce((sum, item) => sum + item.productsCount, 0), hint: "Qoldig‘i mavjud pozitsiyalar" }, { label: "Jami birlik", value: warehouses.reduce((sum, item) => sum + item.onHand, 0), hint: "Barcha omborlar bo‘yicha" }]} actions={<PrimaryButton onClick={startCreate}><Plus size={15} /> Ombor</PrimaryButton>} columns={[
       { key: "name", label: "Nomi", render: (row) => <div><strong>{row.name}</strong><div className="qp-muted">{row.address || "Manzil kiritilmagan"}</div></div> },
-      { key: "branch", label: "Filial" },
+      { key: "branchName", label: "Filial" },
       { key: "productsCount", label: "Mahsulotlar", render: (row) => `${row.productsCount} ta` },
       { key: "onHand", label: "Jami qoldiq", render: (row) => <strong>{row.onHand}</strong> },
       { key: "status", label: "Holat", render: (row) => <StatusPill status={row.status} /> },
       { key: "actions", label: "Amal", sortable: false, render: (row) => <RowActions items={[{ label: "Tahrirlash", icon: Edit3, onClick: () => startEdit(row) }, { label: row.status === "ACTIVE" ? "Faolsizlantirish" : "Faollashtirish", icon: Power, onClick: () => toggleStatus(row) }, { label: "Butunlay o‘chirish", icon: Trash2, tone: "danger", onClick: () => removeWarehouse(row) }]} /> },
     ]} />
-    <Modal open={open} title={editingId ? "Omborni tahrirlash" : "Yangi ombor"} description="Joylashuv Yandex xarita va yetkazib berish marshrutlarida ishlatiladi." onClose={() => setOpen(false)} wide><form onSubmit={submit}><div className="qp-form-grid"><Field label="Nomi"><input className="qp-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field><Field label="Filial"><input className="qp-input" value={form.branch} onChange={(e) => setForm({ ...form, branch: e.target.value })} /></Field><div style={{ gridColumn: "1 / -1" }}><LocationPicker value={form} onChange={(location) => setForm({ ...form, ...location })} /></div></div><div className="qp-form-actions"><SecondaryButton type="button" onClick={() => setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit">{editingId ? "Yangilash" : "Saqlash"}</PrimaryButton></div></form></Modal>
+    <Modal open={open} title={editingId ? "Omborni tahrirlash" : "Yangi ombor"} description="Joylashuv Yandex xarita va yetkazib berish marshrutlarida ishlatiladi." onClose={() => setOpen(false)} wide><form onSubmit={submit}><div className="qp-form-grid"><Field label="Nomi"><input className="qp-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field><Field label="Filial"><select className="qp-input" value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })}><option value="">Biriktirilmagan</option>{(db.branches || []).map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></Field><div style={{ gridColumn: "1 / -1" }}><LocationPicker value={form} onChange={(location) => setForm({ ...form, ...location })} /></div></div><div className="qp-form-actions"><SecondaryButton type="button" onClick={() => setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit">{editingId ? "Yangilash" : "Saqlash"}</PrimaryButton></div></form></Modal>
   </>;
 }
 export default WarehousesPage;

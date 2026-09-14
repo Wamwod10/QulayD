@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import { EMPLOYEE_WORKSPACES } from "../../../config/employeeWorkspaces";
 import { useAuth } from "../../../hooks/useAuth";
 import { useLocalDb } from "../../../services/localDb";
+import { getDisplayValue } from "../../../utils/displayValue";
 import { formatMoney } from "../../../utils/formatters";
 import { PageShell, StatusPill } from "../../../components/prototype/PrototypeUI";
 
@@ -159,7 +160,7 @@ function EmployeeWorkspacePage({ workspaceKey }) {
       <section className="qp-role-card qp-workspace-recent">
         <div className="qp-role-card-head"><div><span>Oxirgi faoliyat</span><h2>Sizga tegishli ishlar</h2></div><b>{recentRows.length}</b></div>
         <div className="qp-role-list">
-          {recentRows.length ? recentRows.map((row) => <div className="qp-workspace-row" key={row.id}><div><strong>{row.number || row.name || row.customerName || row.title || `#${String(row.id).slice(0, 8)}`}</strong><span>{row.customer?.name || row.customer || row.note || row.description || "Operatsiya"}</span></div>{row.status ? <StatusPill status={row.status}/> : null}</div>) : <div className="qp-role-empty">Hozircha sizga biriktirilgan yangi vazifa yo‘q.</div>}
+          {recentRows.length ? recentRows.map((row) => <div className="qp-workspace-row" key={row.id}><div><strong>{getDisplayValue(row.number || row.name || row.customerName || row.title, `#${String(row.id).slice(0, 8)}`)}</strong><span>{getDisplayValue(row.customer || row.note || row.description, "Operatsiya")}</span></div>{row.status ? <StatusPill status={row.status}/> : null}</div>) : <div className="qp-role-empty">Hozircha sizga biriktirilgan yangi vazifa yo‘q.</div>}
         </div>
       </section>
     </PageShell>

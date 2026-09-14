@@ -1,3 +1,5 @@
+import { getDisplayValue } from "./displayValue";
+
 const labels = {
   ASSIGNED: "Biriktirilgan",
   SEEN: "Ko‘rildi",
@@ -94,11 +96,12 @@ const labels = {
 
 export function getLabel(value, fallback = "—") {
   if (value === null || value === undefined || value === "") return fallback;
-  return labels[String(value)] || String(value).replaceAll("_", " ");
+  const displayValue = getDisplayValue(value, fallback);
+  return labels[String(displayValue)] || String(displayValue).replaceAll("_", " ");
 }
 
 export function getStatusTone(status) {
-  const value = String(status || "").toUpperCase();
+  const value = String(getDisplayValue(status, "")).toUpperCase();
   if (["ACTIVE", "PAID", "CONFIRMED", "COMPLETED", "READY", "DELIVERED", "RECEIVED", "DONE", "OK", "APPROVED"].includes(value)) return "success";
   if (["PICKING", "PICKED", "PACKING", "PLANNED", "PENDING", "RESERVED", "OUT_FOR_DELIVERY", "ARRIVED", "IN_PROGRESS", "PARTIAL", "PARTIALLY_PAID", "PARTIALLY_DELIVERED", "SUBMITTED", "INSPECTING", "SENT"].includes(value)) return "warning";
   if (["CANCELLED", "FAILED", "REJECTED", "OVERDUE", "INACTIVE", "OUT_OF_STOCK"].includes(value)) return "danger";
@@ -106,7 +109,9 @@ export function getStatusTone(status) {
 }
 
 export function getPaymentMethodLabel(value, methods = []) {
-  const custom = methods.find((item) => item.code === value);
+  const safeMethods = Array.isArray(methods) ? methods : [];
+  const primitiveValue = getDisplayValue(value, "");
+  const custom = safeMethods.find((item) => item.code === primitiveValue || item.id === primitiveValue);
   if (custom) return custom.name;
   return getLabel(value, "Noma’lum");
 }

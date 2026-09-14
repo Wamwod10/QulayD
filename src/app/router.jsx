@@ -49,6 +49,7 @@ import UserDetailsPage from "../features/users/pages/UserDetailsPage";
 import VisitsPage from "../features/visits/pages/VisitsPage";
 import WarehousesPage from "../features/warehouses/pages/WarehousesPage";
 import EmployeeWorkspacePage from "../features/workspaces/pages/EmployeeWorkspacePage";
+import ErrorBoundary from "../components/feedback/ErrorBoundary";
 import GuestRoute from "../guards/GuestRoute";
 import ModuleRoute from "../guards/ModuleRoute";
 import PermissionRoute from "../guards/PermissionRoute";
@@ -167,7 +168,7 @@ const securedOwnerChildren = ownerChildren.map((route) => {
   if (route.index || route.path === "*") return route;
   return {
     ...route,
-    element: <ModuleRoute moduleKey={getRouteModule(route.path)}><PermissionRoute permission={getRoutePermission(route.path)}>{route.element}</PermissionRoute></ModuleRoute>,
+    element: <ErrorBoundary><ModuleRoute moduleKey={getRouteModule(route.path)}><PermissionRoute permission={getRoutePermission(route.path)}>{route.element}</PermissionRoute></ModuleRoute></ErrorBoundary>,
   };
 });
 
@@ -185,7 +186,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/sales/pos",
-    element: <ProtectedRoute allowRoles={platformRoles}><ModuleRoute moduleKey="pos"><PermissionRoute permission={PERMISSIONS.POS_CREATE}><PosPage /></PermissionRoute></ModuleRoute></ProtectedRoute>,
+    element: <ErrorBoundary><ProtectedRoute allowRoles={platformRoles}><ModuleRoute moduleKey="pos"><PermissionRoute permission={PERMISSIONS.POS_CREATE}><PosPage /></PermissionRoute></ModuleRoute></ProtectedRoute></ErrorBoundary>,
   },
   {
     element: <ProtectedRoute allowRoles={platformRoles}><AppLayout /></ProtectedRoute>,

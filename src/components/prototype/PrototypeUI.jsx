@@ -4,6 +4,7 @@ import { NavLink } from "react-router-dom";
 
 import SectionNavigation from "../navigation/SectionNavigation";
 import { getLabel, getStatusTone } from "../../utils/labels";
+import { getDisplayValue } from "../../utils/displayValue";
 
 export function PageShell({ title, description = "", actions = null, children, eyebrow = "" }) {
   return (
@@ -11,9 +12,9 @@ export function PageShell({ title, description = "", actions = null, children, e
       <SectionNavigation />
       <div className="qp-page-head">
         <div className="qp-page-title-wrap">
-          {eyebrow ? <div className="qp-eyebrow">{eyebrow}</div> : null}
-          <h1>{title}</h1>
-          {description ? <p>{description}</p> : null}
+          {eyebrow ? <div className="qp-eyebrow">{getDisplayValue(eyebrow)}</div> : null}
+          <h1>{getDisplayValue(title)}</h1>
+          {description ? <p>{getDisplayValue(description)}</p> : null}
         </div>
         {actions ? <div className="qp-head-actions">{actions}</div> : null}
       </div>
@@ -28,8 +29,8 @@ export function SectionCard({ title = "", description = "", actions = null, chil
       {title || actions ? (
         <div className="qp-card-head">
           <div>
-            {title ? <h2>{title}</h2> : null}
-            {description ? <p>{description}</p> : null}
+            {title ? <h2>{getDisplayValue(title)}</h2> : null}
+            {description ? <p>{getDisplayValue(description)}</p> : null}
           </div>
           {actions ? <div className="qp-card-actions">{actions}</div> : null}
         </div>
@@ -53,7 +54,7 @@ export function GhostButton({ children, className = "", ...props }) {
 
 export function StatusPill({ status, label = "" }) {
   const tone = getStatusTone(status);
-  return <span className={`qp-status qp-status-${tone}`}>{label || getLabel(status)}</span>;
+  return <span className={`qp-status qp-status-${tone}`}>{getDisplayValue(label || getLabel(status))}</span>;
 }
 
 export function SearchBox({ value, onChange, placeholder = "Qidirish..." }) {
@@ -65,9 +66,9 @@ export function Modal({ open, title, description = "", onClose, children, wide =
   if (!open) return null;
   return (
     <div className="qp-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className={`qp-modal ${wide ? "qp-modal-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`qp-modal ${wide ? "qp-modal-wide" : ""}`} role="dialog" aria-modal="true" aria-label={getDisplayValue(title)}>
         <div className="qp-modal-head">
-          <div><h2>{title}</h2>{description ? <p>{description}</p> : null}</div>
+          <div><h2>{getDisplayValue(title)}</h2>{description ? <p>{getDisplayValue(description)}</p> : null}</div>
           <button className="qp-icon-button qp-overlay-close" type="button" onClick={onClose} aria-label="Yopish"><ArrowLeft className="qp-overlay-back-icon" size={19} /><X className="qp-overlay-x-icon" size={18} /></button>
         </div>
         <div className="qp-modal-body">{children}</div>
@@ -81,12 +82,12 @@ export function Drawer({ open, title, description = "", onClose, children, actio
   if (!open) return null;
   return (
     <div className="qp-drawer-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <aside className="qp-drawer" role="dialog" aria-modal="true" aria-label={title}>
+      <aside className="qp-drawer" role="dialog" aria-modal="true" aria-label={getDisplayValue(title)}>
         <div className="qp-drawer-head">
           <div>
             <div className="qp-eyebrow">Tezkor ko‘rinish</div>
-            <h2>{title}</h2>
-            {description ? <p>{description}</p> : null}
+            <h2>{getDisplayValue(title)}</h2>
+            {description ? <p>{getDisplayValue(description)}</p> : null}
           </div>
           <button className="qp-icon-button qp-overlay-close" type="button" onClick={onClose} aria-label="Yopish"><ArrowLeft className="qp-overlay-back-icon" size={19} /><X className="qp-overlay-x-icon" size={18} /></button>
         </div>
@@ -116,11 +117,11 @@ function useOverlayLifecycle(open, onClose) {
 }
 
 export function Field({ label, children, hint = "" }) {
-  return <label className="qp-field"><span>{label}</span>{children}{hint ? <small>{hint}</small> : null}</label>;
+  return <label className="qp-field"><span>{getDisplayValue(label)}</span>{children}{hint ? <small>{getDisplayValue(hint)}</small> : null}</label>;
 }
 
 export function EmptyBlock({ title = "Ma’lumot yo‘q", description = "Bu yerda hozircha ma’lumot mavjud emas." }) {
-  return <div className="qp-empty"><strong>{title}</strong><span>{description}</span></div>;
+  return <div className="qp-empty"><strong>{getDisplayValue(title)}</strong><span>{getDisplayValue(description)}</span></div>;
 }
 
 export function SummaryGrid({ children, className = "", compact = false }) {
@@ -128,7 +129,7 @@ export function SummaryGrid({ children, className = "", compact = false }) {
 }
 
 export function SummaryItem({ label, value, hint = "", icon = null, tone = "", className = "" }) {
-  return <div className={`qp-summary-card ${tone ? `is-${tone}` : ""} ${className}`.trim()}><div className="qp-summary-card-top qp-metric-top"><span>{label}</span>{icon ? <i>{icon}</i> : null}</div><strong>{value}</strong>{hint ? <small>{hint}</small> : null}</div>;
+  return <div className={`qp-summary-card ${tone ? `is-${tone}` : ""} ${className}`.trim()}><div className="qp-summary-card-top qp-metric-top"><span>{getDisplayValue(label)}</span>{icon ? <i>{icon}</i> : null}</div><strong>{getDisplayValue(value)}</strong>{hint ? <small>{getDisplayValue(hint)}</small> : null}</div>;
 }
 
 export function Metric({ label, value, hint = "", icon = null }) {

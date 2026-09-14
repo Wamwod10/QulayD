@@ -3,6 +3,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { apiRequest, AUTH_EVENT, DEFAULT_COMPANY_ID, getActiveCompanyId } from "./authService";
 import { useBootstrapQuery } from "./baseApi";
 import { STORAGE_KEYS } from "../constants/storageKeys";
+import { relationDisplayFields } from "../utils/displayValue";
 
 const STORAGE_KEY_PREFIX = "qulay.ui.preferences.v1";
 const EVENT_NAME = "qulay:local-db-change";
@@ -123,11 +124,20 @@ function setState(value) {
   return cache;
 }
 
-function normalizeRemoteData(remote) {
-  const mapped = { ...remote };
+const RELATION_KEYS = [
+  "warehouse", "sourceWarehouse", "targetWarehouse", "customer", "employee", "branch", "product",
+  "supplier", "category", "unit", "paymentMethod", "createdBy", "assignedTo", "pickerEmployee",
+  "driver", "agent", "order", "invoice", "route", "territory",
+];
+
+export function normalizeRemoteData(remote = {}) {
+  const mapped = Object.fromEntries(Object.entries(remote).map(([key, value]) => [
+    key,
+    Array.isArray(value) ? value.map((item) => relationDisplayFields(item, RELATION_KEYS)) : value,
+  ]));
   mapped.settings = remote.settingsRecord?.data || {};
   mapped.products = (remote.products || []).map((item) => ({
-    ...item,
+    ...relationDisplayFields(item, RELATION_KEYS),
     barcode: item.barcodes?.find((code) => code.isPrimary)?.barcode || item.barcodes?.[0]?.barcode || "",
     barcodes: item.barcodes?.map((code) => code.barcode) || [],
     image: item.imageUrl || "",
@@ -135,7 +145,7 @@ function normalizeRemoteData(remote) {
     wholesalePrice: Number(item.prices?.[1]?.price || item.prices?.[0]?.price || 0),
   }));
   mapped.orders = (remote.orders || []).map((item) => ({
-    ...item,
+    ...relationDisplayFields(item, RELATION_KEYS),
     date: item.orderedAt || item.createdAt,
     items: (item.items || []).map((line) => ({ ...line, price: Number(line.unitPrice ?? line.price ?? 0) })),
   }));
@@ -150,6 +160,21 @@ function normalizeRemoteData(remote) {
     stops: (item.stops || []).map((stop) => stop.customerId),
   }));
   mapped.routePlans = (remote.routePlans || []).map((item) => ({ ...item, date: item.planDate, stops: (item.stops || []).map((stop) => ({ ...stop, order: stop.stopOrder })) }));
+  mapped.warehouses = (mapped.warehouses || []).map((item) => ({ ...item, branchName: item.branchName || "—" }));
+  mapped.transfers = (mapped.transfers || []).map((item) => ({
+    ...item,
+    fromWarehouseId: item.fromWarehouseId || item.sourceWarehouseId || "",
+    toWarehouseId: item.toWarehouseId || item.targetWarehouseId || "",
+    fromWarehouseName: item.fromWarehouseName || item.sourceWarehouseName || "—",
+    toWarehouseName: item.toWarehouseName || item.targetWarehouseName || "—",
+    productId: item.productId || item.items?.[0]?.productId || "",
+    quantity: item.quantity ?? item.items?.[0]?.quantity ?? 0,
+  }));
+  mapped.deliveryTrips = (mapped.deliveryTrips || []).map((item) => ({
+    ...item,
+    driverName: item.driverName || item.driver?.name || "—",
+    warehouseName: item.warehouseName || item.warehouse?.name || "—",
+  }));
   mapped.contacts = [...(remote.customers || []), ...(remote.suppliers || [])].flatMap((item) => item.contacts || []);
   return mapped;
 }

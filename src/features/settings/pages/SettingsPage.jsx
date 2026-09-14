@@ -94,6 +94,22 @@ function SettingRow({ title, description = "", children = null }) {
   );
 }
 
+function ToggleList({ section, db, items = [], children = null }) {
+  const title = nav.find(([key]) => key === section)?.[1] || "Sozlamalar";
+  return (
+    <SectionCard title={title}>
+      <div className="qp-settings-panel">
+        {items.map(([key, label, description]) => (
+          <SettingRow key={key} title={label} description={description}>
+            <Toggle value={Boolean(db.settings[section]?.[key])} onChange={(value) => setSetting(section, key, value)} />
+          </SettingRow>
+        ))}
+        {children}
+      </div>
+    </SectionCard>
+  );
+}
+
 function setSetting(section, key, value) {
   updateLocalDb((draft) => {
     if (!draft.settings[section]) draft.settings[section] = {};

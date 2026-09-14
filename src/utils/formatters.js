@@ -1,5 +1,6 @@
 import { DEFAULT_COMPANY_ID, getActiveCompanyId } from "../services/authService";
 import { currencyMeta, FALLBACK_RATES } from "../services/currencyService";
+import { getDisplayValue, getPrimitiveId } from "./displayValue";
 
 function readLocalPreferences() {
   if (typeof window === "undefined") return null;
@@ -52,11 +53,15 @@ export function formatNumber(value) {
 }
 
 export function getName(collection, id, fallback = "—") {
-  return collection?.find((item) => item.id === id)?.name || fallback;
+  if (id && typeof id === "object") return getDisplayValue(id, fallback);
+  const safeCollection = Array.isArray(collection) ? collection : [];
+  const primitiveId = getPrimitiveId(id);
+  return getDisplayValue(safeCollection.find((item) => getPrimitiveId(item) === primitiveId), fallback);
 }
 
 export function shortDate(value) {
   if (!value) return "—";
+  if (typeof value === "object" && !(value instanceof Date)) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   const settings = readLocalSettings();
@@ -71,6 +76,7 @@ export function shortDate(value) {
 }
 
 export function formatTime(value = new Date()) {
+  if (typeof value === "object" && !(value instanceof Date)) return "—";
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
   const settings = readLocalSettings();
@@ -85,6 +91,7 @@ export function formatTime(value = new Date()) {
 
 export function formatDateTime(value, { seconds = false } = {}) {
   if (!value) return "—";
+  if (typeof value === "object" && !(value instanceof Date)) return "—";
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   const datePart = shortDate(date);

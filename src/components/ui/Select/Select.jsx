@@ -1,6 +1,7 @@
 import { Check, ChevronDown, Search } from "lucide-react";
 import { Children, isValidElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { getDisplayValue, getPrimitiveId } from "../../../utils/displayValue";
 
 import "./Select.scss";
 
@@ -8,7 +9,12 @@ function flattenOptions(children) {
   return Children.toArray(children)
     .flatMap((child) => Array.isArray(child) ? child : [child])
     .filter((child) => isValidElement(child) && child.type === "option")
-    .map((child) => ({ value: String(child.props.value ?? child.props.children ?? ""), label: child.props.children, disabled: Boolean(child.props.disabled) }));
+    .map((child, index) => ({
+      key: child.key || `${getPrimitiveId(child.props.value)}-${index}`,
+      value: getPrimitiveId(child.props.value ?? child.props.children),
+      label: getDisplayValue(child.props.children, "—"),
+      disabled: Boolean(child.props.disabled),
+    }));
 }
 
 function Select({ value = "", onChange, children, placeholder = "Tanlang", disabled = false, searchable = false, className = "", ariaLabel = "", ...triggerProps }) {
@@ -20,8 +26,9 @@ function Select({ value = "", onChange, children, placeholder = "Tanlang", disab
   const [query, setQuery] = useState("");
   const [menuStyle, setMenuStyle] = useState({});
   const options = useMemo(() => flattenOptions(children), [children]);
-  const selected = options.find((option) => option.value === String(value));
-  const filtered = query.trim() ? options.filter((option) => String(option.label ?? "").toLowerCase().includes(query.trim().toLowerCase())) : options;
+  const primitiveValue = getPrimitiveId(value);
+  const selected = options.find((option) => option.value === primitiveValue);
+  const filtered = query.trim() ? options.filter((option) => String(option.label).toLowerCase().includes(query.trim().toLowerCase())) : options;
 
   const positionMenu = useCallback(() => {
     const trigger = triggerRef.current;
@@ -86,8 +93,8 @@ function Select({ value = "", onChange, children, placeholder = "Tanlang", disab
       {searchable ? <div className="qp-custom-select-search"><Search size={15} /><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Qidirish..." /></div> : null}
       <div className="qp-custom-select-options">
         {filtered.length ? filtered.map((option) => {
-          const active = option.value === String(value);
-          return <button type="button" key={`${option.value}-${String(option.label)}`} className={active ? "is-active" : ""} onClick={() => choose(option)} disabled={option.disabled} role="option" aria-selected={active}><span>{option.label}</span>{active ? <Check size={15} /> : null}</button>;
+          const active = option.value === primitiveValue;
+          return <button type="button" key={option.key} className={active ? "is-active" : ""} onClick={() => choose(option)} disabled={option.disabled} role="option" aria-selected={active}><span>{option.label}</span>{active ? <Check size={15} /> : null}</button>;
         }) : <div className="qp-custom-select-empty">Natija topilmadi</div>}
       </div>
     </div>, document.body) : null;

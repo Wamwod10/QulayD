@@ -42,7 +42,7 @@ function UsersPage() {
   const [editingType, setEditingType] = useState(null);
 
   const employeeTypes = useMemo(() => (db.employeeTypes || []).filter((item) => item.status !== "INACTIVE"), [db.employeeTypes]);
-  const branches = db.branches || [];
+  const branches = useMemo(() => Array.isArray(db.branches) ? db.branches : [], [db.branches]);
   const rows = useMemo(() => (db.users || [])
     .filter((item) => item.role !== "OWNER" && !item.roles?.includes("OWNER"))
     .map((item) => {

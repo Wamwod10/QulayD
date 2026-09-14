@@ -48,6 +48,7 @@ import UsersPage from "../features/users/pages/UsersPage";
 import UserDetailsPage from "../features/users/pages/UserDetailsPage";
 import VisitsPage from "../features/visits/pages/VisitsPage";
 import WarehousesPage from "../features/warehouses/pages/WarehousesPage";
+import EmployeeWorkspacePage from "../features/workspaces/pages/EmployeeWorkspacePage";
 import GuestRoute from "../guards/GuestRoute";
 import ModuleRoute from "../guards/ModuleRoute";
 import PermissionRoute from "../guards/PermissionRoute";
@@ -129,6 +130,12 @@ const ownerChildren = [
   { path: "reports/agents", element: <AgentsReportPage /> },
   { path: "reports/debt", element: <DebtReportPage /> },
   { path: "reports/delivery", element: <DeliveryReportPage /> },
+  { path: "workspaces/agent", element: <EmployeeWorkspacePage workspaceKey="agent_workspace" /> },
+  { path: "workspaces/warehouse", element: <EmployeeWorkspacePage workspaceKey="warehouse_workspace" /> },
+  { path: "workspaces/fulfillment", element: <EmployeeWorkspacePage workspaceKey="fulfillment_workspace" /> },
+  { path: "workspaces/driver", element: <EmployeeWorkspacePage workspaceKey="driver_workspace" /> },
+  { path: "workspaces/sales-operator", element: <EmployeeWorkspacePage workspaceKey="sales_operator_workspace" /> },
+  { path: "workspaces/cashier", element: <EmployeeWorkspacePage workspaceKey="cashier_workspace" /> },
   { path: "help", element: <HelpCenterPage /> },
   { path: "help/:articleId", element: <HelpCenterPage /> },
   { path: "settings", element: <Navigate to="/settings/general" replace /> },

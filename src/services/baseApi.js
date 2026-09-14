@@ -87,6 +87,20 @@ const bootstrapRoutes = {
   workflowNotifications: "/notifications", settingsRecord: "/settings", priceLists: "/pricing", territories: "/routes/territories",
   routeTemplates: "/routes/templates", routePlans: "/routes/plans", visits: "/visits", approvals: "/approvals", activityLog: "/audit",
 };
+const collectionRoutes = Object.entries(bootstrapRoutes)
+  .filter(([, route]) => route && !["/dashboard", "/companies/current", "/finance", "/settings"].includes(route))
+  .sort((a, b) => b[1].length - a[1].length);
+
+function collectionForUrl(url = "") {
+  const clean = String(url).split("?")[0];
+  return collectionRoutes.find(([, route]) => clean === route || clean.startsWith(`${route}/`))?.[0] || null;
+}
+
+function recordIdFromUrl(url = "", route = "") {
+  const tail = String(url).split("?")[0].slice(route.length).replace(/^\//, "").split("/")[0];
+  return /^[0-9a-f-]{20,}$/i.test(tail) ? tail : "";
+}
+
 
 export const baseApi = createApi({
   reducerPath: "api",
@@ -115,6 +129,32 @@ export const baseApi = createApi({
     request: builder.mutation({
       query: ({ url, method = "POST", body, params }) => ({ url, method, body, params }),
       transformResponse: unwrap,
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled;
+          const key = collectionForUrl(arg.url);
+          if (!key) return;
+          const route = bootstrapRoutes[key];
+          const method = String(arg.method || "POST").toUpperCase();
+          const requestId = recordIdFromUrl(arg.url, route);
+          dispatch(baseApi.util.updateQueryData("bootstrap", undefined, (draft) => {
+            if (!Array.isArray(draft?.[key])) return;
+            if (method === "DELETE") {
+              const id = data?.id || requestId;
+              if (id) draft[key] = draft[key].filter((item) => item?.id !== id);
+              return;
+            }
+            if (!data || typeof data !== "object" || Array.isArray(data)) return;
+            const id = data.id || requestId;
+            if (!id) return;
+            const index = draft[key].findIndex((item) => item?.id === id);
+            if (index >= 0) draft[key][index] = { ...draft[key][index], ...data };
+            else draft[key].unshift(data);
+          }));
+        } catch {
+          // Network/validation errors are handled by the caller.
+        }
+      },
       invalidatesTags: ALL_TAGS,
     }),
   }),

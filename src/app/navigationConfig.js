@@ -124,6 +124,48 @@ export const navigationConfig = [
     ],
   },
   {
+    key: "agent_workspace",
+    label: "Agent ish joyi",
+    icon: "agents",
+    to: "/workspaces/agent",
+    description: "Agentning marshrut, tashrif, buyurtma va to‘lovlar uchun shaxsiy ish joyi",
+  },
+  {
+    key: "warehouse_workspace",
+    label: "Omborchi ish joyi",
+    icon: "inventory",
+    to: "/workspaces/warehouse",
+    description: "Omborchi uchun kirim, qoldiq, transfer va inventarizatsiya ish joyi",
+  },
+  {
+    key: "fulfillment_workspace",
+    label: "Yig‘uvchi / Qadoqlovchi",
+    icon: "fulfillment",
+    to: "/workspaces/fulfillment",
+    description: "Yig‘ish varaqasi, picking va qadoqlash vazifalari",
+  },
+  {
+    key: "driver_workspace",
+    label: "Haydovchi ish joyi",
+    icon: "delivery",
+    to: "/workspaces/driver",
+    description: "Haydovchi uchun bugungi reys va yetkazib berish topshiriqlari",
+  },
+  {
+    key: "sales_operator_workspace",
+    label: "Sotuv operatori",
+    icon: "sales",
+    to: "/workspaces/sales-operator",
+    description: "Operator uchun mijoz va buyurtma bilan ishlash oynasi",
+  },
+  {
+    key: "cashier_workspace",
+    label: "Kassir / Inkassator",
+    icon: "finance",
+    to: "/workspaces/cashier",
+    description: "To‘lov, qarzdorlik va kassa jarayonlari uchun ish joyi",
+  },
+  {
     key: "help",
     label: "Yordam markazi",
     icon: "help",
@@ -197,6 +239,12 @@ export function getNavigationDefaultPath(item) {
 export function getRouteModule(pathname = "") {
   const path = pathname.replace(/^\//, "").split("?")[0];
   if (path === "dashboard" || path === "operations") return "dashboard";
+  if (path === "workspaces/agent") return "agent_workspace";
+  if (path === "workspaces/warehouse") return "warehouse_workspace";
+  if (path === "workspaces/fulfillment") return "fulfillment_workspace";
+  if (path === "workspaces/driver") return "driver_workspace";
+  if (path === "workspaces/sales-operator") return "sales_operator_workspace";
+  if (path === "workspaces/cashier") return "cashier_workspace";
   if (path.startsWith("help")) return "";
   if (path === "notifications") return "";
   if (path === "sales/pos") return "pos";
@@ -215,6 +263,12 @@ export function getRouteModule(pathname = "") {
 export function getRoutePermission(pathname = "") {
   const path = pathname.replace(/^\//, "").split("?")[0];
   if (path === "operations") return PERMISSIONS.DASHBOARD_VIEW;
+  if (path === "workspaces/agent") return "agent_workspace.read";
+  if (path === "workspaces/warehouse") return "warehouse_workspace.read";
+  if (path === "workspaces/fulfillment") return "fulfillment_workspace.read";
+  if (path === "workspaces/driver") return "driver_workspace.read";
+  if (path === "workspaces/sales-operator") return "sales_operator_workspace.read";
+  if (path === "workspaces/cashier") return "cashier_workspace.read";
   if (path === "users" || path.startsWith("users/")) return PERMISSIONS.USERS_MANAGE;
   if (path.startsWith("settings") || ["units", "price-lists"].includes(path) || path.includes("catalog/units") || path.includes("catalog/price-lists")) return PERMISSIONS.SETTINGS_MANAGE;
   if (path.startsWith("reports")) return PERMISSIONS.REPORTS_VIEW;

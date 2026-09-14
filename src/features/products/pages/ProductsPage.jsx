@@ -1,4 +1,4 @@
-import { Archive, Barcode, Edit3, Plus, Power, Printer, RefreshCw, Trash2 } from "lucide-react";
+import { Archive, Barcode, Edit3, LoaderCircle, Plus, Power, Printer, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
@@ -42,6 +42,7 @@ function ProductsPage() {
   const [editing, setEditing] = useState(null);
   const [codeProduct, setCodeProduct] = useState(null);
   const [form, setForm] = useState(blankForm);
+  const [busy, setBusy] = useState(false);
 
   const stockMap = useMemo(() => db.balances.reduce((accumulator, balance) => {
     const current = accumulator[balance.productId] || { onHand: 0, reserved: 0 };
@@ -157,6 +158,7 @@ function ProductsPage() {
 
   const submit = async (event) => {
     event.preventDefault();
+    if (busy) return;
     if (!form.name.trim() || !form.categoryId || !form.unitId) {
       notify("Majburiy maydonlarni to‘ldiring", "warning");
       return;
@@ -171,6 +173,7 @@ function ProductsPage() {
       return;
     }
 
+    setBusy(true);
     try {
       if (editing) {
         await apiRequest({ url: `/catalog/products/${editing.id}`, method: "PATCH", body: {
@@ -200,6 +203,8 @@ function ProductsPage() {
       setForm(blankForm);
     } catch (error) {
       notify(error.message || "Mahsulotni saqlab bo‘lmadi", "warning");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -267,7 +272,7 @@ function ProductsPage() {
           { key: "availableStock", label: "Sotish mumkin", render: (row) => <div className={`qp-stock-cell ${row.availableStock <= 0 ? "danger" : row.availableStock <= Number(row.minStock || 0) ? "warning" : ""}`}><strong>{row.availableStock}</strong><span>{row.unit}</span></div> },
           { key: "costPrice", label: "Tannarx", render: (row) => formatMoney(row.costPrice || 0) },
           { key: "price", label: "Sotuv narxi", render: (row) => <strong>{formatMoney(row.price)}</strong> },
-          { key: "wholesalePrice", label: "Tannarx", render: (row) => formatMoney(row.wholesalePrice) },
+          { key: "wholesalePrice", label: "Ulgurji narx", render: (row) => formatMoney(row.wholesalePrice) },
           { key: "status", label: "Holat", render: (row) => <StatusPill status={row.status} /> },
           ...(can(PERMISSIONS.PRODUCTS_MANAGE) ? [{ key: "actions", label: "Amal", sortable: false, render: (row) => <RowActions items={[
             { label: "Tahrirlash", icon: Edit3, onClick: () => openEdit(row) },
@@ -277,8 +282,8 @@ function ProductsPage() {
         ]}
       />
 
-      <Modal open={open} title={editing ? "Mahsulotni tahrirlash" : "Yangi mahsulot"} description="5 xonali SKU avtomatik yaratiladi. Shtrix-kodlarni foydalanuvchi o‘zi kiritadi." onClose={() => setOpen(false)} wide>
-        <form onSubmit={submit}>
+      <Modal open={open} title={editing ? "Mahsulotni tahrirlash" : "Yangi mahsulot"} description="5 xonali SKU avtomatik yaratiladi. Shtrix-kodlarni foydalanuvchi o‘zi kiritadi." onClose={() => { if (!busy) setOpen(false); }} wide>
+        <form onSubmit={submit} aria-busy={busy}>
           <div className="qp-form-grid">
             <div className="qp-form-span-full"><ImageUploader value={form.image} name={form.name} label="Mahsulot rasmini yuklash" onChange={(image) => setForm((current) => ({ ...current, image }))} /></div>
             <Field label="Mahsulot nomi"><input className="qp-input" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Field>
@@ -294,7 +299,7 @@ function ProductsPage() {
             <Field label="Minimal qoldiq"><input className="qp-input" type="number" min="0" value={form.minStock} onChange={(event) => setForm({ ...form, minStock: event.target.value })} /></Field>
             <Field label="Tannarx"><input className="qp-input" type="number" min="0" value={form.costPrice} onChange={(event) => setForm({ ...form, costPrice: event.target.value })} placeholder="Mahsulotning boshlang‘ich tannarxi" /></Field>
             <Field label="Sotuv narxi"><input className="qp-input" type="number" min="0" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></Field>
-            <Field label="Tannarx"><input className="qp-input" type="number" min="0" value={form.wholesalePrice} onChange={(event) => setForm({ ...form, wholesalePrice: event.target.value })} /></Field>
+            <Field label="Ulgurji narx"><input className="qp-input" type="number" min="0" value={form.wholesalePrice} onChange={(event) => setForm({ ...form, wholesalePrice: event.target.value })} /></Field>
 
             {!editing ? (
               <>
@@ -313,7 +318,7 @@ function ProductsPage() {
               </>
             )}
           </div>
-          <div className="qp-form-actions"><SecondaryButton type="button" onClick={() => setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit">{editing ? "Yangilash" : "Saqlash"}</PrimaryButton></div>
+          <div className="qp-form-actions"><SecondaryButton type="button" disabled={busy} onClick={() => setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit" disabled={busy}>{busy ? <><LoaderCircle className="qp-spin" size={15}/> Saqlanmoqda...</> : editing ? "Yangilash" : "Saqlash"}</PrimaryButton></div>
         </form>
       </Modal>
 

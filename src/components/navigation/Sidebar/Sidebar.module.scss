@@ -376,3 +376,24 @@
     color: var(--qp-primary-dark);
   }
 }
+
+/* Final compact flyout density */
+.flyout { width: 336px; padding: 7px; }
+.flyoutHeader { padding: 9px 10px 10px; }
+.flyoutHeader h2 { margin-top: 2px; font-size: 16px; }
+.flyoutHeader p { margin-top: 2px; font-size: 11px; }
+.flyoutLinks { gap: 1px; padding-top: 5px; }
+.flyoutLink { gap: 2px; padding: 8px 10px; border-radius: 9px; }
+.flyoutLinkTitle { font-size: 12px; }
+.flyoutDescription { font-size: 10.5px; line-height: 1.32; }
+
+@media (max-width: 1023px) {
+  .sidebar { width: min(286px, 86vw); }
+  .sidebarInner { box-shadow: 18px 0 46px rgba(10,20,13,.14); }
+  .brand { min-height: 60px; height: 60px; padding: 0 14px; }
+  .logoMark { width: 34px; height: 34px; border-radius: 11px; }
+  .navigation { gap: 1px; padding: 9px 8px; }
+  .navItem { min-height: 44px; padding: 7px 10px; border-radius: 10px; }
+  .mobileSubmenu { gap: 1px; margin: 1px 0 6px 30px; padding: 4px; }
+  .mobileSubmenuLink { min-height: 42px; padding: 7px 9px; }
+}

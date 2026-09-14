@@ -1,12 +1,13 @@
 import { Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
+import SessionLoader from "../components/system/SessionLoader";
 
 function ProtectedRoute({ children, allowRoles = [], allowTemporaryPassword = false }) {
   const { isLoading, user } = useAuth();
   const location = useLocation();
 
-  if (isLoading) return <div className="qp-page-loading" role="status">Sessiya tekshirilmoqda...</div>;
+  if (isLoading) return <SessionLoader />;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
 
   if (user.mustChangePassword && !allowTemporaryPassword && location.pathname !== "/change-password") {

@@ -27,7 +27,11 @@ const DEFAULT_SETTINGS = {
     stickySectionNavigation: true, showTableSummary: true,
   },
   company: { name: "", logo: "", currency: "UZS", language: "uz", timezone: "Asia/Tashkent", branch: "", defaultWarehouseId: "" },
-  modules: {},
+  modules: { dashboard: true, sales: true, pos: true, inventory: true, partners: true, agents: true, routes: true, fulfillment: true, delivery: true, finance: true, reports: true, settings: true },
+  employeeWorkspaces: {
+    agent_workspace: false, warehouse_workspace: false, fulfillment_workspace: false,
+    driver_workspace: false, sales_operator_workspace: false, cashier_workspace: false,
+  },
   sales: { autoConfirmOrders: false, allowNegativeStock: false, maxAgentDiscount: 0, allowOrderEdit: true, showStockOnOrder: true, warnCustomerDebt: true },
   pos: { warehouseId: "", priceListId: "", productView: "card", allowAnonymousCustomer: true, showImages: true, printReceipt: false, barcodeAutoAdd: true, clearCartAfterSale: true, showStockBadge: true, allowHeldCarts: true },
   inventory: { allowNegativeStock: false, reservations: true, lowStockAlerts: true, requireTransferApproval: true, requireAdjustmentApproval: true },

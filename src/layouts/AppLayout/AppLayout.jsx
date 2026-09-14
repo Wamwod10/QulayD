@@ -10,8 +10,14 @@ import { useLocalDb } from "../../services/localDb";
 
 import styles from "./AppLayout.module.scss";
 
+const SIDEBAR_PREF_KEY = "qulay.ui.sidebar.collapsed";
+
 function AppLayout() {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const saved = window.localStorage.getItem(SIDEBAR_PREF_KEY);
+    return saved === null ? true : saved === "true";
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const modules = useLocalDb((db) => db.settings.modules);
   const location = useLocation();
@@ -31,6 +37,10 @@ function AppLayout() {
   }, [isMobileMenuOpen]);
 
   useEffect(() => { setIsMobileMenuOpen(false); }, [location.pathname]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") window.localStorage.setItem(SIDEBAR_PREF_KEY, String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
 
   useEffect(() => {
     const section = findNavigationSection(location.pathname);

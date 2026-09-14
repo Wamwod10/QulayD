@@ -1,11 +1,12 @@
 import { baseApi, clearSession, saveSession } from "./baseApi";
 import { store } from "../app/store";
 import { STORAGE_KEYS } from "../constants/storageKeys";
+import { EMPLOYEE_WORKSPACES, EMPLOYEE_WORKSPACE_KEYS } from "../config/employeeWorkspaces";
 
 const SESSION_KEY = STORAGE_KEYS.accessToken;
 const AUTH_EVENT = "qulay:auth-change";
 const DEFAULT_COMPANY_ID = "";
-const PLATFORM_MODULE_KEYS = ["dashboard", "sales", "pos", "inventory", "partners", "agents", "routes", "fulfillment", "delivery", "finance", "reports", "settings"];
+const PLATFORM_MODULE_KEYS = ["dashboard", "sales", "pos", "inventory", "partners", "agents", "routes", "fulfillment", "delivery", "finance", "reports", "settings", ...EMPLOYEE_WORKSPACE_KEYS];
 
 let currentUser = null;
 let currentCompany = null;
@@ -49,8 +50,46 @@ async function run(endpoint, input, fallback) {
   catch (error) { throw apiError(error, fallback); }
 }
 
+const inFlightMutations = new Map();
+
+function actionButtonForCurrentInteraction() {
+  if (typeof document === "undefined") return null;
+  const active = document.activeElement;
+  if (active?.matches?.("button")) return active;
+  const form = active?.closest?.("form");
+  return form?.querySelector?.('button[type="submit"], .qp-button-primary') || null;
+}
+
+function markActionBusy(button, busy) {
+  if (!button) return;
+  if (busy) {
+    if (!button.dataset.qulayPrevDisabled) button.dataset.qulayPrevDisabled = button.disabled ? "1" : "0";
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.classList.add("qp-api-busy");
+  } else {
+    if (button.dataset.qulayPrevDisabled !== "1") button.disabled = false;
+    delete button.dataset.qulayPrevDisabled;
+    button.removeAttribute("aria-busy");
+    button.classList.remove("qp-api-busy");
+  }
+}
+
+function requestKey({ url, method, body, params }) {
+  return `${String(method || "POST").toUpperCase()}:${url}:${JSON.stringify(params || null)}:${JSON.stringify(body || null)}`;
+}
+
 export async function apiRequest({ url, method = "POST", body, params }) {
-  return run(baseApi.endpoints.request, { url, method, body, params }, "Amalni bajarib bo‘lmadi.");
+  const verb = String(method || "POST").toUpperCase();
+  if (verb === "GET") return run(baseApi.endpoints.request, { url, method: verb, body, params }, "Amalni bajarib bo‘lmadi.");
+  const key = requestKey({ url, method: verb, body, params });
+  if (inFlightMutations.has(key)) return inFlightMutations.get(key);
+  const button = actionButtonForCurrentInteraction();
+  markActionBusy(button, true);
+  const promise = run(baseApi.endpoints.request, { url, method: verb, body, params }, "Amalni bajarib bo‘lmadi.")
+    .finally(() => { inFlightMutations.delete(key); markActionBusy(button, false); });
+  inFlightMutations.set(key, promise);
+  return promise;
 }
 
 function acceptAuth(result) {
@@ -150,6 +189,9 @@ export async function revokeUserSessions(userId) {
 }
 export function getHomePathForUser(user) {
   if (!user) return "/login";
+  if (user.roles?.some((role) => ["OWNER", "ADMIN", "SUPER_ADMIN"].includes(role))) return "/dashboard";
+  const workspace = (user.modules || []).find((key) => EMPLOYEE_WORKSPACE_KEYS.includes(key));
+  if (workspace) return EMPLOYEE_WORKSPACES[workspace]?.path || "/forbidden";
   const first = (user.modules || []).find((key) => PLATFORM_MODULE_KEYS.includes(key));
   return { dashboard: "/dashboard", sales: "/orders", pos: "/sales/pos", inventory: "/inventory", partners: "/customers", agents: "/agents", routes: "/routes/today", fulfillment: "/fulfillment", delivery: "/deliveries", finance: "/finance", reports: "/reports", settings: "/settings/general" }[first] || "/forbidden";
 }

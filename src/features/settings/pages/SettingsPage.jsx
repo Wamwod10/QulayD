@@ -1,7 +1,7 @@
 import ImageUploader from "../../../components/ui/ImageUploader";
 import Select from "../../../components/ui/Select";
 import { getLanguageLabel } from "../../../i18n";
-import { Download, Plus, RotateCcw, ShieldCheck, Smartphone, Wifi, WifiOff } from "lucide-react";
+import { Download, Edit3, LoaderCircle, Plus, RotateCcw, ShieldCheck, Smartphone, Trash2, Wifi, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
@@ -22,6 +22,7 @@ import { formatDateTime } from "../../../utils/formatters";
 import { clearDeviceUnlock, hashDevicePin, markDeviceUnlocked } from "../../../utils/deviceSecurity";
 import { isStandaloneMode } from "../../../utils/pwa";
 import { apiRequest } from "../../../services/authService";
+import { EMPLOYEE_WORKSPACE_OPTIONS } from "../../../config/employeeWorkspaces";
 
 const nav = [
   ["general", "Umumiy"],
@@ -235,42 +236,32 @@ function AppearanceSettings({ db }) {
 
 function ModulesSettings({ db }) {
   const labels = {
-    sales: "Savdo",
-    pos: "Tezkor kassa",
-    inventory: "Ombor",
-    partners: "Hamkorlar",
-    agents: "Agentlar",
-    routes: "Marshrutlar",
-    fulfillment: "Tayyorlash",
-    delivery: "Yetkazib berish",
-    finance: "Moliya",
-    reports: "Hisobotlar",
+    sales: "Savdo", pos: "Tezkor kassa", inventory: "Ombor", partners: "Hamkorlar",
+    agents: "Agentlar", routes: "Marshrutlar", fulfillment: "Tayyorlash", delivery: "Yetkazib berish",
+    finance: "Moliya", reports: "Hisobotlar", dashboard: "Bosh sahifa", settings: "Sozlamalar",
   };
+  const normalEntries = Object.entries(db.settings.modules || {}).filter(([key]) => !key.endsWith("_workspace"));
   return (
-    <SectionCard title="Modullar" description="O‘chirilgan bo‘lim sidebar va ichki navigatsiyadan yashiriladi. Ma’lumotlar o‘chirilmaydi.">
-      <div className="qp-settings-panel">
-        {Object.entries(db.settings.modules).map(([key, value]) => (
-          <SettingRow key={key} title={labels[key] || key} description="Bo‘lim va unga tegishli ishchi sahifalarning ko‘rinishi">
-            <Toggle value={value} onChange={(next) => setSetting("modules", key, next)} />
-          </SettingRow>
-        ))}
-      </div>
-    </SectionCard>
-  );
-}
-
-function ToggleList({ section, items, db, children = null }) {
-  return (
-    <SectionCard title={nav.find(([key]) => key === section)?.[1] || "Sozlamalar"}>
-      <div className="qp-settings-panel">
-        {children}
-        {items.map(([key, title, description]) => (
-          <SettingRow key={key} title={title} description={description}>
-            <Toggle value={Boolean(db.settings[section]?.[key])} onChange={(next) => setSetting(section, key, next)} />
-          </SettingRow>
-        ))}
-      </div>
-    </SectionCard>
+    <div className="qp-stack">
+      <SectionCard title="Biznes modullari" description="O‘chirilgan bo‘lim sidebar va ichki navigatsiyadan yashiriladi. Ma’lumotlar o‘chirilmaydi.">
+        <div className="qp-settings-panel">
+          {normalEntries.map(([key, value]) => (
+            <SettingRow key={key} title={labels[key] || key} description="Bo‘lim va unga tegishli boshqaruv sahifalarining ko‘rinishi">
+              <Toggle value={value} onChange={(next) => setSetting("modules", key, next)} />
+            </SettingRow>
+          ))}
+        </div>
+      </SectionCard>
+      <SectionCard title="Xodim ish modullari" description="Bu modullar xodimlarga biriktiriladi. Owner sidebarida birinchi holatda yashirin; preview yoki nazorat uchun xohlasangiz yoqing.">
+        <div className="qp-settings-panel">
+          {EMPLOYEE_WORKSPACE_OPTIONS.map(([key, workspace]) => (
+            <SettingRow key={key} title={workspace.label} description={workspace.description}>
+              <Toggle value={Boolean(db.settings.employeeWorkspaces?.[key])} onChange={(next) => setSetting("employeeWorkspaces", key, next)} />
+            </SettingRow>
+          ))}
+        </div>
+      </SectionCard>
+    </div>
   );
 }
 
@@ -330,26 +321,80 @@ function PosSettings({ db }) {
 }
 
 function PaymentMethodsSettings({ db }) {
+  const empty = { name: "", shortcut: "", commissionType: "NONE", commissionRate: "" };
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", shortcut: "", commissionType: "NONE" });
+  const [editing, setEditing] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState(empty);
+
+  const openCreate = () => { setEditing(null); setForm(empty); setOpen(true); };
+  const openEdit = (method) => {
+    setEditing(method);
+    setForm({
+      name: method.name || "",
+      shortcut: method.shortcut || "",
+      commissionType: method.metadata?.commissionType || (Number(method.commissionRate || 0) > 0 ? "PERCENT" : "NONE"),
+      commissionRate: Number(method.commissionRate || 0) || "",
+    });
+    setOpen(true);
+  };
+
   const submit = async (event) => {
     event.preventDefault();
+    if (busy) return;
     const name = form.name.trim();
     if (!name) { notify("To‘lov usuli nomini kiriting", "warning"); return; }
-    if ((db.paymentMethods || []).some((item) => item.name.toLowerCase() === name.toLowerCase())) { notify("Bu nomdagi to‘lov usuli mavjud", "warning"); return; }
-    try { await apiRequest({ url: "/pos/payment-methods", body: { code: `CUSTOM_${Date.now().toString(36).toUpperCase()}`, name, method: "OTHER", shortcut: form.shortcut || undefined, status: "ACTIVE", metadata: { commissionType: form.commissionType } } }); setForm({ name: "", shortcut: "", commissionType: "NONE" }); setOpen(false); notify("To‘lov usuli yaratildi"); }
-    catch (error) { notify(error.message, "danger"); }
+    if ((db.paymentMethods || []).some((item) => item.id !== editing?.id && item.name.toLowerCase() === name.toLowerCase())) { notify("Bu nomdagi to‘lov usuli mavjud", "warning"); return; }
+    setBusy(true);
+    try {
+      const body = editing ? {
+        name,
+        shortcut: form.shortcut || undefined,
+        commissionRate: form.commissionType === "PERCENT" ? Number(form.commissionRate || 0) : 0,
+        metadata: { ...(editing.metadata || {}), commissionType: form.commissionType },
+      } : {
+        code: `CUSTOM_${Date.now().toString(36).toUpperCase()}`,
+        name,
+        method: "OTHER",
+        shortcut: form.shortcut || undefined,
+        status: "ACTIVE",
+        commissionRate: form.commissionType === "PERCENT" ? Number(form.commissionRate || 0) : 0,
+        metadata: { commissionType: form.commissionType },
+      };
+      await apiRequest({ url: editing ? `/pos/payment-methods/${editing.id}` : "/pos/payment-methods", method: editing ? "PATCH" : "POST", body });
+      setOpen(false); setEditing(null); setForm(empty);
+      notify(editing ? "To‘lov usuli yangilandi" : "To‘lov usuli yaratildi");
+    } catch (error) { notify(error.message, "danger"); }
+    finally { setBusy(false); }
   };
+
+  const remove = async (method) => {
+    if (busy) return;
+    if (!window.confirm(`“${method.name}” to‘lov usulini o‘chirasizmi? Tarixiy to‘lovlar saqlanadi.`)) return;
+    setBusy(true);
+    try {
+      await apiRequest({ url: `/pos/payment-methods/${method.id}`, method: "DELETE" });
+      notify("To‘lov usuli o‘chirildi", "warning");
+    } catch (error) { notify(error.message, "danger"); }
+    finally { setBusy(false); }
+  };
+
   return <>
     <SectionCard title="To‘lov usullari" description="Bu yagona ro‘yxat POS, moliya, to‘lov tarixi, chek va hisobotlarda ishlatiladi.">
-      <div className="qp-settings-panel">{(db.paymentMethods || []).map((method)=><SettingRow key={method.id} title={method.name} description={`${method.shortcut || "Tezkor klavish yo‘q"} · ${method.commissionType === "PERCENT" ? "Foizli komissiya" : method.commissionType === "FIXED" ? "Belgilangan komissiya" : "Komissiyasiz"}`}><strong>{method.code}</strong></SettingRow>)}</div>
-      <div className="qp-form-actions"><PrimaryButton type="button" onClick={()=>setOpen(true)}><Plus size={15}/> To‘lov usuli</PrimaryButton></div>
+      <div className="qp-settings-panel">{(db.paymentMethods || []).map((method) => {
+        const commissionType = method.metadata?.commissionType || (Number(method.commissionRate || 0) > 0 ? "PERCENT" : "NONE");
+        return <SettingRow key={method.id} title={method.name} description={`${method.shortcut || "Tezkor klavish yo‘q"} · ${commissionType === "PERCENT" ? `${Number(method.commissionRate || 0)}% komissiya` : commissionType === "FIXED" ? "Belgilangan komissiya" : "Komissiyasiz"}`}>
+          <div className="qp-inline-actions"><strong>{method.code}</strong><button type="button" className="qp-icon-button" title="Tahrirlash" onClick={() => openEdit(method)}><Edit3 size={15}/></button><button type="button" className="qp-icon-button qp-danger-icon" title="O‘chirish" onClick={() => remove(method)}><Trash2 size={15}/></button></div>
+        </SettingRow>;
+      })}</div>
+      <div className="qp-form-actions"><PrimaryButton type="button" onClick={openCreate}><Plus size={15}/> To‘lov usuli</PrimaryButton></div>
     </SectionCard>
-    <Modal open={open} title="Yangi to‘lov usuli" onClose={()=>setOpen(false)}><form onSubmit={submit}><div className="qp-form-grid">
+    <Modal open={open} title={editing ? "To‘lov usulini tahrirlash" : "Yangi to‘lov usuli"} onClose={() => { if (!busy) { setOpen(false); setEditing(null); } }}><form onSubmit={submit} aria-busy={busy}><div className="qp-form-grid">
       <Field label="Nom"><input required className="qp-input" value={form.name} onChange={(event)=>setForm({...form,name:event.target.value})} placeholder="Masalan: Click"/></Field>
       <Field label="Tezkor klavish"><input className="qp-input" value={form.shortcut} onChange={(event)=>setForm({...form,shortcut:event.target.value.toUpperCase()})} placeholder="Masalan: F4"/></Field>
       <Field label="Komissiya turi"><Select value={form.commissionType} onChange={(event)=>setForm({...form,commissionType:event.target.value})}><option value="NONE">Komissiyasiz</option><option value="PERCENT">Foiz</option><option value="FIXED">Belgilangan summa</option></Select></Field>
-    </div><div className="qp-form-actions"><SecondaryButton type="button" onClick={()=>setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit">Saqlash</PrimaryButton></div></form></Modal>
+      {form.commissionType === "PERCENT" ? <Field label="Komissiya (%)"><input className="qp-input" type="number" min="0" max="100" step="0.01" value={form.commissionRate} onChange={(event)=>setForm({...form,commissionRate:event.target.value})}/></Field> : null}
+    </div><div className="qp-form-actions"><SecondaryButton type="button" disabled={busy} onClick={()=>setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit" disabled={busy}>{busy ? <><LoaderCircle className="qp-spin" size={15}/> Saqlanmoqda...</> : "Saqlash"}</PrimaryButton></div></form></Modal>
   </>;
 }
 

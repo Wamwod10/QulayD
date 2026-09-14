@@ -10,4 +10,11 @@
 .qp-image-remove { align-self:flex-start; display:inline-flex; align-items:center; gap:6px; border:0; background:transparent; color:var(--qp-danger); font:inherit; font-size:12px; cursor:pointer; }
 .qp-image-uploader.compact .qp-image-dropzone { min-height:78px; grid-template-columns:54px minmax(0,1fr) auto; }
 .qp-image-uploader.compact .qp-image-dropzone>img,.qp-image-uploader.compact .qp-image-placeholder { width:54px; height:54px; border-radius:12px; }
+.qp-image-preview-stack { display:flex; align-items:center; width:86px; height:64px; }
+.qp-image-preview-stack img { width:54px; height:54px; border-radius:10px; object-fit:cover; border:2px solid var(--qp-surface); margin-right:-24px; box-shadow:0 3px 9px rgba(20,40,29,.12); }
+.qp-image-list { display:flex; gap:8px; overflow-x:auto; padding:2px; }
+.qp-image-list > div { position:relative; flex:0 0 82px; padding:5px; border:1px solid var(--qp-border); border-radius:10px; background:var(--qp-surface-2); }
+.qp-image-list img { width:70px; height:55px; object-fit:cover; border-radius:7px; }
+.qp-image-list span { display:block; overflow:hidden; margin-top:3px; color:var(--qp-muted); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+.qp-image-list button { position:absolute; top:1px; right:1px; display:grid; place-items:center; width:23px; height:23px; border:0; border-radius:7px; background:rgba(255,255,255,.94); color:var(--qp-danger); cursor:pointer; }
 @media (max-width: 640px) { .qp-image-dropzone { grid-template-columns:58px minmax(0,1fr); } .qp-image-dropzone>svg { display:none; } .qp-image-dropzone>img,.qp-image-placeholder { width:58px; height:58px; } }

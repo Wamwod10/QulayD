@@ -127,7 +127,8 @@ export const baseApi = createApi({
       providesTags: ALL_TAGS,
     }),
     request: builder.mutation({
-      query: ({ url, method = "POST", body, params }) => ({ url, method, body, params }),
+      query: ({ url, method = "POST", body, params, idempotencyKey }) => ({ url, method, body, params,
+        ...(idempotencyKey ? { headers: { "idempotency-key": idempotencyKey } } : {}) }),
       transformResponse: unwrap,
       async onQueryStarted(arg, { dispatch, queryFulfilled }) {
         try {

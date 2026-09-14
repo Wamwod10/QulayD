@@ -26,6 +26,7 @@ function SmartTablePage({
   eyebrow,
   rows,
   columns,
+  defaultVisibleColumnKeys,
   actions = null,
   searchFields = [],
   filters = null,
@@ -47,17 +48,17 @@ function SmartTablePage({
   const [selectedRow, setSelectedRow] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
-  const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => safeColumns.map((column) => column.key));
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => defaultVisibleColumnKeys || safeColumns.map((column) => column.key));
   const columnMenuRef = useRef(null);
 
   useEffect(() => {
     setVisibleColumnKeys((current) => {
       const available = safeColumns.map((column) => column.key);
       const preserved = current.filter((key) => available.includes(key));
-      const newKeys = available.filter((key) => !current.includes(key));
-      return [...preserved, ...newKeys];
+      const newKeys = defaultVisibleColumnKeys ? [] : available.filter((key) => !current.includes(key));
+      return preserved.length ? [...preserved, ...newKeys] : (defaultVisibleColumnKeys || available);
     });
-  }, [safeColumns]);
+  }, [defaultVisibleColumnKeys, safeColumns]);
 
   useEffect(() => {
     const close = (event) => {

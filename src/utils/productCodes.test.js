@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createProductIdentity, findProductByScan, generateUniqueSku, getProductBarcodes } from "./productCodes";
+import { collectProductBarcodes, createProductIdentity, findProductByScan, findProductSelectionByScan, generateUniqueSku, getProductBarcodes } from "./productCodes";
 
 describe("product identity", () => {
   it("creates a unique five-digit SKU and an empty first barcode", () => {
@@ -18,8 +18,22 @@ describe("product identity", () => {
     expect(findProductByScan(products, "SKU-123456")?.id).toBe("p1");
   });
 
-  it("never returns an existing five-digit SKU", () => {
+  it("never returns an existing product or variant five-digit SKU", () => {
     const products = Array.from({ length: 20 }, (_, index) => ({ id: String(index), sku: String(index).padStart(5, "0") }));
-    expect(products.map((item) => item.sku)).not.toContain(generateUniqueSku(products));
+    products[0].variants = [{ sku: "99999" }];
+    const generated = generateUniqueSku(products);
+    expect(products.map((item) => item.sku)).not.toContain(generated);
+    expect(generated).not.toBe("99999");
+  });
+
+  it("collects variant and package barcodes for client-side duplicate protection", () => {
+    const products = [{ id: "p1", barcodes: ["111"], variants: [{ barcodes: ["222"] }], packages: [{ barcode: "333" }] }];
+    expect([...collectProductBarcodes(products)].sort()).toEqual(["111", "222", "333"]);
+  });
+
+  it("does not resolve inactive variant or package barcodes", () => {
+    const products = [{ id: "p1", status: "ACTIVE", variants: [{ id: "v1", status: "INACTIVE", barcodes: ["222"] }], packages: [{ id: "pk1", status: "INACTIVE", barcode: "333" }] }];
+    expect(findProductSelectionByScan(products, "222")).toBeNull();
+    expect(findProductSelectionByScan(products, "333")).toBeNull();
   });
 });

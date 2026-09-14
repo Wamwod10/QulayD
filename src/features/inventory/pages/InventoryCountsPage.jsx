@@ -16,10 +16,12 @@ function createDraftItems(db, warehouseId) {
     .filter((product) => product.status === "ACTIVE")
     .map((product) => {
       const balance = db.balances.find((item) => item.warehouseId === warehouseId && item.productId === product.id);
+      const tracked = Boolean(product.trackSerial || product.trackLot || product.trackExpiry);
       return {
         productId: product.id,
         systemQty: Number(balance?.onHand || 0),
-        countedQty: "",
+        countedQty: tracked ? String(Number(balance?.onHand || 0)) : "",
+        tracked,
         note: "",
       };
     });
@@ -84,6 +86,10 @@ function InventoryCountsPage() {
     }
     if (!items.some((item) => item.productId === product.id)) {
       notify("Bu mahsulot tanlangan ombor inventarizatsiyasida yo‘q", "warning");
+      return false;
+    }
+    if (product.trackSerial || product.trackLot || product.trackExpiry) {
+      notify("Tracked mahsulot farqi Qoldiq tuzatish bo‘limida lot/serial bilan kiritiladi", "info");
       return false;
     }
     setItems((current) => current.map((item) => {
@@ -178,7 +184,7 @@ function InventoryCountsPage() {
                 <td><strong>{product?.name || "Mahsulot"}</strong></td>
                 <td><span className="qp-muted">{product?.sku || "—"}</span></td>
                 <td><strong>{line.systemQty}</strong></td>
-                <td><input className="qp-input qp-count-input" type="number" min="0" value={line.countedQty} onChange={(event) => setCounted(line.productId, event.target.value)} placeholder="0" /></td>
+                <td><input className="qp-input qp-count-input" type="number" min="0" value={line.countedQty} disabled={Boolean(product?.trackSerial || product?.trackLot || product?.trackExpiry)} title={product?.trackSerial || product?.trackLot || product?.trackExpiry ? "Tracked mahsulot farqi Qoldiq tuzatish orqali lot/serial bilan kiritiladi" : undefined} onChange={(event) => setCounted(line.productId, event.target.value)} placeholder="0" /></td>
                 <td>{diff === null ? <span className="qp-muted">—</span> : <strong className={diff === 0 ? "qp-text-success" : "qp-text-warning"}>{diff > 0 ? `+${diff}` : diff}</strong>}</td>
               </tr>;
             })}</tbody>

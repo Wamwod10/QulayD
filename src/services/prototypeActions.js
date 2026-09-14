@@ -37,7 +37,8 @@ export async function createSupplier(payload) {
 
 export async function createOrder(payload) {
   const items = (payload.items || []).filter((item) => item.productId && Number(item.quantity) > 0)
-    .map((item) => ({ productId: item.productId, quantity: Number(item.quantity), unitPrice: Number(item.unitPrice ?? item.price ?? 0), discount: Number(item.discount || 0) }));
+    .map((item) => ({ productId: item.productId, variantId: item.variantId || null, packageId: item.packageId || null, quantity: Number(item.quantity),
+      unitPrice: Number(item.unitPrice ?? item.price ?? 0), discount: Number(item.discount || 0) }));
   const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
   return perform({ url: "/orders", body: { branchId: payload.branchId || undefined, warehouseId: payload.warehouseId,
     customerId: payload.customerId || null, priceListId: payload.priceListId || null, agentId: payload.agentId || null,
@@ -50,25 +51,35 @@ export const approveOrderRequest = sendOrderToPreparation;
 export const rejectOrderRequest = (id, reason = "Owner tomonidan rad etildi") => perform({ url: `/orders/${id}/cancel`, body: { note: reason } }, "Buyurtma bekor qilindi");
 export const markOrderReadyForDelivery = (id) => perform({ url: `/orders/${id}/ready`, body: {} }, "Buyurtma yetkazishga tayyor");
 
-export async function completePosSale({ cart, customerId, warehouseId, paymentMethod }) {
-  const items = cart.map((item) => ({ productId: item.productId, quantity: Number(item.quantity), unitPrice: Number(item.unitPrice ?? item.price), discount: Number(item.discount || 0) }));
-  const total = items.reduce((sum, item) => sum + item.quantity * item.unitPrice - item.discount, 0);
-  return perform({ url: "/pos/sales", body: { warehouseId, customerId: customerId || null, items, payments: [{ method: paymentMethod || "CASH", amount: total }] } }, "Sotuv yakunlandi");
+export async function completePosSale({ cart, customerId, warehouseId, shiftId, priceListId, paymentMethod, total, generalDiscount, dueAt }) {
+  const items = cart.map((item) => ({ productId: item.productId, variantId: item.variantId || null, packageId: item.packageId || null,
+    quantity: Number(item.quantity), unitPrice: Number(item.unitPrice ?? item.price), discount: item.discountValue ? { type: item.discountType || "FIXED", value: Number(item.discountValue) } : undefined,
+    serialIds: item.serialIds || [], batchId: item.batchId || null }));
+  return perform({ url: "/pos/sales", body: { warehouseId, customerId: customerId || null, shiftId: shiftId || null, priceListId: priceListId || null,
+    items, discount: generalDiscount?.value ? { type: generalDiscount.type || "FIXED", value: Number(generalDiscount.value) } : undefined,
+    payments: [{ methodCode: paymentMethod || "CASH", amount: Number(total), ...(dueAt ? { dueAt } : {}) }] } }, "Sotuv yakunlandi");
 }
 
 export async function createGoodsReceipt(payload) {
   const result = await perform({ url: "/inventory/goods-receipts", body: { supplierId: payload.supplierId, warehouseId: payload.warehouseId,
-    note: payload.note || undefined, items: (payload.items || []).map((item) => ({ productId: item.productId, quantity: Number(item.quantity), unitCost: Number(item.unitCost ?? item.cost ?? 0) })) } }, "Kirim yaratildi");
+    note: payload.note || undefined, items: (payload.items || []).map((item) => ({ productId: item.productId, variantId: item.variantId || null, packageId: item.packageId || null,
+      quantity: Number(item.quantity), unitCost: Number(item.unitCost ?? item.cost ?? 0), lotNumber: item.lotNumber?.trim() || undefined,
+      manufacturedAt: item.manufacturedAt || undefined, expiresAt: item.expiresAt || undefined,
+      serialNumbers: Array.isArray(item.serialNumbers) ? item.serialNumbers : String(item.serialNumbers || "").split(/[\n,]+/).map((value) => value.trim()).filter(Boolean) })) } }, "Kirim yaratildi");
   if (!result.ok) return result;
   return perform({ url: `/inventory/goods-receipts/${result.data.id}/confirm`, body: {} }, "Kirim tasdiqlandi");
 }
 
 export const createStockAdjustment = (payload) => perform({ url: "/inventory/adjustments", body: { warehouseId: payload.warehouseId, reason: payload.reason,
-  items: payload.items || [{ productId: payload.productId, quantity: Number(payload.quantity) }] } }, "Qoldiq tuzatishi yaratildi");
+  items: payload.items || [{ productId: payload.productId, variantId: payload.variantId || null, packageId: payload.packageId || null, batchId: payload.batchId || null,
+    quantity: Number(payload.quantity), unitCost: payload.unitCost === "" || payload.unitCost == null ? undefined : Number(payload.unitCost), serialIds: payload.serialIds || [],
+    serialNumbers: Array.isArray(payload.serialNumbers) ? payload.serialNumbers : String(payload.serialNumbers || "").split(/[\n,]+/).map((value) => value.trim()).filter(Boolean),
+    lotNumber: payload.lotNumber?.trim() || undefined, manufacturedAt: payload.manufacturedAt || undefined, expiresAt: payload.expiresAt || undefined }] } }, "Qoldiq tuzatishi yaratildi");
 export const approveStockAdjustment = (id) => perform({ url: `/inventory/adjustments/${id}/approve`, body: {} }, "Qoldiq tuzatishi tasdiqlandi");
 export const createTransfer = (payload) => perform({ url: "/inventory/transfers", body: { sourceWarehouseId: payload.sourceWarehouseId || payload.fromWarehouseId,
   targetWarehouseId: payload.targetWarehouseId || payload.toWarehouseId, note: payload.note || undefined,
-  items: payload.items || [{ productId: payload.productId, quantity: Number(payload.quantity) }] } }, "Ko‘chirish yaratildi");
+  items: payload.items || [{ productId: payload.productId, variantId: payload.variantId || null, packageId: payload.packageId || null, batchId: payload.batchId || null,
+    quantity: Number(payload.quantity), serialIds: payload.serialIds || [] }] } }, "Ko‘chirish yaratildi");
 export async function approveTransfer(id) {
   const approved = await perform({ url: `/inventory/transfers/${id}/approve`, body: {} }, "Ko‘chirish tasdiqlandi");
   return approved.ok ? perform({ url: `/inventory/transfers/${id}/complete`, body: {} }, "Ko‘chirish yakunlandi") : approved;

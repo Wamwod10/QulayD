@@ -16,7 +16,23 @@ export function normalizeBarcode(value) {
 
 export function getProductBarcodes(product) {
   const values = Array.isArray(product?.barcodes) ? product.barcodes : [product?.barcode];
-  return Array.from(new Set(values.map(normalizeBarcode).filter(Boolean)));
+  return Array.from(new Set(values.map((value) => normalizeBarcode(value?.barcode ?? value)).filter(Boolean)));
+}
+
+export function findProductSelectionByScan(products = [], rawValue) {
+  const candidates = getScanCandidates(rawValue);
+  for (const product of products) {
+    const serial = (Array.isArray(product.serials) ? product.serials : []).find((item) => item.status === "AVAILABLE" && candidates.some((value) => value === String(item.serial || "") || value === String(item.imei || "")));
+    if (serial) return { product, serial, variant: serial.variantId
+      ? (Array.isArray(product.variants) ? product.variants : []).find((item) => item.id === serial.variantId) || null : null };
+    const variant = (Array.isArray(product.variants) ? product.variants : []).find((item) => item.status !== "INACTIVE" && candidates.some((value) => getProductBarcodes(item).includes(value)));
+    if (variant) return { product, variant };
+    const productPackage = (Array.isArray(product.packages) ? product.packages : []).find((item) => item.status !== "INACTIVE" && candidates.some((value) => getProductBarcodes(item).includes(value)));
+    if (productPackage) return { product, package: productPackage, variant: productPackage.variantId
+      ? (Array.isArray(product.variants) ? product.variants : []).find((item) => item.id === productPackage.variantId) || null : null };
+    if (candidates.some((value) => getProductBarcodes(product).includes(value) || String(product.sku || "") === value || String(product.id || "") === value)) return { product };
+  }
+  return null;
 }
 
 
@@ -37,29 +53,33 @@ export function getScanCandidates(rawValue) {
 }
 
 export function findProductByScan(products = [], rawValue) {
-  const candidates = getScanCandidates(rawValue);
-  if (!candidates.length) return null;
-  return products.find((product) => {
-    const codes = getProductBarcodes(product);
-    return candidates.some((value) => codes.includes(value) || String(product.sku || "") === value || String(product.id || "") === value);
-  }) || null;
+  return findProductSelectionByScan(products, rawValue)?.product || null;
 }
 
 export function collectProductBarcodes(products = [], excludeProductId = "") {
   return new Set(
     products
       .filter((product) => product.id !== excludeProductId)
-      .flatMap((product) => getProductBarcodes(product)),
+      .flatMap((product) => [
+        ...getProductBarcodes(product),
+        ...(Array.isArray(product.variants) ? product.variants : []).flatMap((variant) => getProductBarcodes(variant)),
+        ...(Array.isArray(product.packages) ? product.packages : []).flatMap((productPackage) => getProductBarcodes(productPackage)),
+      ]),
+  );
+}
+
+export function collectProductSkus(products = [], excludeProductId = "") {
+  return new Set(
+    products
+      .filter((product) => product.id !== excludeProductId)
+      .flatMap((product) => [product.sku, ...(Array.isArray(product.variants) ? product.variants.map((variant) => variant.sku) : [])])
+      .map((sku) => String(sku || "").trim().toUpperCase())
+      .filter(Boolean),
   );
 }
 
 export function generateUniqueSku(products = [], excludeProductId = "") {
-  const existing = new Set(
-    products
-      .filter((product) => product.id !== excludeProductId)
-      .map((product) => String(product.sku || "").trim().toUpperCase())
-      .filter(Boolean),
-  );
+  const existing = collectProductSkus(products, excludeProductId);
   for (let attempt = 0; attempt < 1000; attempt += 1) {
     const candidate = randomDigits(5);
     if (!existing.has(candidate)) return candidate;

@@ -125,10 +125,9 @@ export function DeliveriesPage() {
   }));
   const selectedDelivery = db.deliveries.find((item) => item.id === selectedDeliveryId);
   const selectedOrder = db.orders.find((item) => item.id === selectedDelivery?.orderId);
-  const deliveredMap = new Map((selectedDelivery?.deliveredItems || []).map((item) => [item.productId, Number(item.quantity) || 0]));
   const remainingItems = (selectedOrder?.items || []).map((line) => ({
     ...line,
-    remaining: Math.max(0, Number(line.quantity || 0) - Number(deliveredMap.get(line.productId) || 0)),
+    remaining: Math.max(0, Number(line.quantity || 0) - Number(line.fulfilledQty || 0)),
     product: getName(db.products, line.productId),
   })).filter((line) => line.remaining > 0);
 
@@ -163,7 +162,7 @@ export function DeliveriesPage() {
     if (mode === "partial") {
       result = await completePartialDelivery(
         selectedDeliveryId,
-        remainingItems.map((line) => ({ orderItemId: line.id, quantity: Number(partialItems[line.productId] || 0) })).filter((line) => line.quantity > 0),
+        remainingItems.map((line) => ({ orderItemId: line.id, quantity: Number(partialItems[line.id] || 0) })).filter((line) => line.quantity > 0),
         proof,
       );
     } else if (mode === "failed") {
@@ -242,9 +241,9 @@ export function DeliveriesPage() {
           <SectionCard title="Yetkazilgan miqdor" description="Faqat haqiqatda topshirilgan miqdorni kiriting. Qolgan qism buyurtma uchun band holatda qoladi.">
             <div className="qp-partial-delivery-list">
               {remainingItems.map((line) => (
-                <div className="qp-partial-delivery-row" key={line.productId}>
-                  <div><strong>{line.product}</strong><span>Qolgan: {line.remaining}</span></div>
-                  <input className="qp-input" type="number" min="0" max={line.remaining} value={partialItems[line.productId] || ""} onChange={(event) => setPartialItems({ ...partialItems, [line.productId]: event.target.value })} placeholder="0" />
+                <div className="qp-partial-delivery-row" key={line.id}>
+                  <div><strong>{[line.product, line.variantName, line.packageName].filter(Boolean).join(" · ")}</strong><span>Qolgan: {line.remaining}</span></div>
+                  <input className="qp-input" type="number" min="0" max={line.remaining} step="0.001" value={partialItems[line.id] || ""} onChange={(event) => setPartialItems({ ...partialItems, [line.id]: event.target.value })} placeholder="0" />
                 </div>
               ))}
             </div>

@@ -16,10 +16,12 @@ function createDraftItems(db, warehouseId) {
     .filter((product) => product.status === "ACTIVE")
     .map((product) => {
       const balance = db.balances.find((item) => item.warehouseId === warehouseId && item.productId === product.id);
+      const tracked = Boolean(product.trackSerial || product.trackLot || product.trackExpiry);
       return {
         productId: product.id,
         systemQty: Number(balance?.onHand || 0),
-        countedQty: "",
+        countedQty: tracked ? String(Number(balance?.onHand || 0)) : "",
+        tracked,
         note: "",
       };
     });
@@ -29,6 +31,7 @@ function InventoryCountsPage() {
   const db = useLocalDb();
   const [open, setOpen] = useState(false);
   const [countId, setCountId] = useState(null);
+  const [countStatus, setCountStatus] = useState("");
   const [warehouseId, setWarehouseId] = useState(db.settings.company.defaultWarehouseId || db.warehouses[0]?.id || "");
   const [query, setQuery] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -43,6 +46,7 @@ function InventoryCountsPage() {
   const openNew = () => {
     const nextWarehouse = db.settings.company.defaultWarehouseId || db.warehouses[0]?.id || "";
     setCountId(null);
+    setCountStatus("");
     setWarehouseId(nextWarehouse);
     setItems(createDraftItems(db, nextWarehouse));
     setQuery("");
@@ -51,8 +55,12 @@ function InventoryCountsPage() {
 
   const openCount = (row) => {
     setCountId(row.id);
+    setCountStatus(row.status || "");
     setWarehouseId(row.warehouseId);
-    setItems((row.items?.length ? row.items : createDraftItems(db, row.warehouseId)).map((item) => ({ ...item, countedQty: item.countedQty ?? "" })));
+    setItems((row.items?.length ? row.items : createDraftItems(db, row.warehouseId)).map((item) => {
+      const product = db.products.find((entry) => entry.id === item.productId); const tracked = Boolean(product?.trackSerial || product?.trackLot || product?.trackExpiry);
+      const systemQty = Number(item.systemQty ?? item.expected ?? 0); return { ...item, systemQty, tracked, countedQty: tracked && (item.countedQty == null || item.countedQty === "") ? String(systemQty) : (item.countedQty ?? "") };
+    }));
     setQuery("");
     setOpen(true);
   };
@@ -86,6 +94,10 @@ function InventoryCountsPage() {
       notify("Bu mahsulot tanlangan ombor inventarizatsiyasida yo‘q", "warning");
       return false;
     }
+    if (product.trackSerial || product.trackLot || product.trackExpiry) {
+      notify("Tracked mahsulot farqi Qoldiq tuzatish bo‘limida lot/serial bilan kiritiladi", "info");
+      return false;
+    }
     setItems((current) => current.map((item) => {
       if (item.productId !== product.id) return item;
       const currentQty = item.countedQty === "" || item.countedQty === null ? 0 : Number(item.countedQty || 0);
@@ -106,9 +118,12 @@ function InventoryCountsPage() {
   const differences = items.filter((item) => item.countedQty !== "" && Number(item.countedQty) !== Number(item.systemQty)).length;
 
   const saveDraft = async () => {
-    if (countId) { notify("Inventarizatsiya qoralamasi avval saqlangan", "info"); return countId; }
-    try { const created = await apiRequest({ url: "/inventory/counts", body: { warehouseId, items: items.map((line) => ({ productId: line.productId, counted: Number(line.countedQty || line.systemQty || 0) })) } }); setCountId(created.id); notify("Inventarizatsiya qoralamasi saqlandi"); return created.id; }
-    catch (error) { notify(error.message, "danger"); return null; }
+    if (countStatus === "COMPLETED") { notify("Yakunlangan inventarizatsiyani o‘zgartirib bo‘lmaydi", "warning"); return null; }
+    const lines = items.map((line) => ({ productId: line.productId, counted: line.countedQty === "" || line.countedQty == null ? null : Number(line.countedQty) }));
+    try {
+      if (countId) { await apiRequest({ url: `/inventory/counts/${countId}`, method: "PATCH", body: { items: lines } }); notify("Inventarizatsiya qoralamasi yangilandi"); return countId; }
+      const created = await apiRequest({ url: "/inventory/counts", body: { warehouseId, items: lines } }); setCountId(created.id); setCountStatus(created.status || "IN_PROGRESS"); notify("Inventarizatsiya qoralamasi saqlandi"); return created.id;
+    } catch (error) { notify(error.message, "danger"); return null; }
   };
 
   const finalize = async () => {
@@ -117,12 +132,13 @@ function InventoryCountsPage() {
       notify(`Yakunlash uchun barcha mahsulotlarni sanang. Qoldi: ${items.length - countedCount}`, "warning");
       return;
     }
-    const id = countId || await saveDraft(); if (!id) return;
+    const id = await saveDraft(); if (!id) return;
     try { await apiRequest({ url: `/inventory/counts/${id}/complete`, body: {} }); }
     catch (error) { notify(error.message, "danger"); return; }
     notify("Inventarizatsiya yakunlandi va qoldiqlar yangilandi");
     setOpen(false);
     setCountId(null);
+    setCountStatus("");
   };
 
   return <>
@@ -133,7 +149,7 @@ function InventoryCountsPage() {
       rows={rows}
       searchFields={["number", "warehouse", "status"]}
       extraSummary={[
-        { label: "Jarayonda", value: rows.filter((row) => ["DRAFT", "COUNTING", "REVIEW"].includes(row.status)).length, hint: "Sanash tugallanmagan" },
+        { label: "Jarayonda", value: rows.filter((row) => ["DRAFT", "IN_PROGRESS", "COUNTING", "REVIEW"].includes(row.status)).length, hint: "Sanash tugallanmagan" },
         { label: "Yakunlangan", value: rows.filter((row) => row.status === "COMPLETED").length, hint: "Qoldiq yangilangan" },
         { label: "Farqli hujjatlar", value: rows.filter((row) => Number(row.differences) > 0).length, hint: "Tekshiruv talab qilgan" },
       ]}
@@ -152,7 +168,7 @@ function InventoryCountsPage() {
       ]}
     />
 
-    <Modal open={open} title={countId ? "Inventarizatsiyani davom ettirish" : "Yangi inventarizatsiya"} description="Mahsulotlarni sanang, farqlarni tekshiring va keyin yakunlang." onClose={() => setOpen(false)} wide>
+    <Modal open={open} title={countStatus === "COMPLETED" ? "Inventarizatsiya natijasi" : countId ? "Inventarizatsiyani davom ettirish" : "Yangi inventarizatsiya"} description={countStatus === "COMPLETED" ? "Yakunlangan hujjat faqat ko‘rish uchun ochilgan." : "Mahsulotlarni sanang, farqlarni tekshiring va keyin yakunlang."} onClose={() => setOpen(false)} wide>
       <div className="qp-count-workspace">
         <div className="qp-count-toolbar">
           <Field label="Ombor"><Select value={warehouseId} onChange={(event) => changeWarehouse(event.target.value)} disabled={Boolean(countId)}>{db.warehouses.filter((item) => item.status === "ACTIVE").map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select></Field>
@@ -178,7 +194,7 @@ function InventoryCountsPage() {
                 <td><strong>{product?.name || "Mahsulot"}</strong></td>
                 <td><span className="qp-muted">{product?.sku || "—"}</span></td>
                 <td><strong>{line.systemQty}</strong></td>
-                <td><input className="qp-input qp-count-input" type="number" min="0" value={line.countedQty} onChange={(event) => setCounted(line.productId, event.target.value)} placeholder="0" /></td>
+                <td><input className="qp-input qp-count-input" type="number" min="0" value={line.countedQty} disabled={countStatus === "COMPLETED" || Boolean(product?.trackSerial || product?.trackLot || product?.trackExpiry)} title={product?.trackSerial || product?.trackLot || product?.trackExpiry ? "Tracked mahsulot farqi Qoldiq tuzatish orqali lot/serial bilan kiritiladi" : undefined} onChange={(event) => setCounted(line.productId, event.target.value)} placeholder="0" /></td>
                 <td>{diff === null ? <span className="qp-muted">—</span> : <strong className={diff === 0 ? "qp-text-success" : "qp-text-warning"}>{diff > 0 ? `+${diff}` : diff}</strong>}</td>
               </tr>;
             })}</tbody>
@@ -186,9 +202,11 @@ function InventoryCountsPage() {
         </div>
 
         <div className="qp-form-actions qp-count-actions">
-          <SecondaryButton type="button" onClick={() => { setItems(createDraftItems(db, warehouseId)); notify("Sanash maydonlari qayta tiklandi", "info"); }}><RotateCcw size={15} /> Qayta boshlash</SecondaryButton>
-          <SecondaryButton type="button" onClick={saveDraft}><ClipboardCheck size={15} /> Qoralama saqlash</SecondaryButton>
-          <PrimaryButton type="button" onClick={finalize}><CheckCircle2 size={16} /> Inventarizatsiyani yakunlash</PrimaryButton>
+          {countStatus === "COMPLETED" ? <SecondaryButton type="button" onClick={() => setOpen(false)}>Yopish</SecondaryButton> : <>
+            <SecondaryButton type="button" onClick={() => { setItems(createDraftItems(db, warehouseId)); notify("Sanash maydonlari qayta tiklandi", "info"); }}><RotateCcw size={15} /> Qayta boshlash</SecondaryButton>
+            <SecondaryButton type="button" onClick={saveDraft}><ClipboardCheck size={15} /> Qoralama saqlash</SecondaryButton>
+            <PrimaryButton type="button" onClick={finalize}><CheckCircle2 size={16} /> Inventarizatsiyani yakunlash</PrimaryButton>
+          </>}
         </div>
       </div>
     </Modal>

@@ -26,9 +26,11 @@ function resolveAssignments(payload, refs) {
     || refs.roles.find((item) => item.code === "EMPLOYEE")
     || refs.roles.find((item) => item.code === "SALES_AGENT");
   if (!role) throw new Error("Xodim uchun backend roli topilmadi.");
-  const branch = refs.branches.find((item) => item.id === payload.branchId)
-    || refs.branches.find((item) => item.name === payload.branch)
-    || refs.branches[0];
+  const branch = payload.branchId
+    ? refs.branches.find((item) => item.id === payload.branchId)
+    : payload.branch
+      ? refs.branches.find((item) => item.name === payload.branch)
+      : null;
   const warehouse = refs.warehouses.find((item) => item.id === payload.warehouseId);
   const employeeType = refs.employeeTypes.find((item) => item.id === payload.employeeTypeId)
     || refs.employeeTypes.find((item) => item.code === requested);

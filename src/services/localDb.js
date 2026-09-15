@@ -136,21 +136,38 @@ export function normalizeRemoteData(remote = {}) {
     Array.isArray(value) ? value.map((item) => relationDisplayFields(item, RELATION_KEYS)) : value,
   ]));
   mapped.settings = remote.settingsRecord?.data || {};
-  mapped.products = (remote.products || []).map((item) => ({
-    ...relationDisplayFields(item, RELATION_KEYS),
-    barcode: item.barcodes?.find((code) => code.isPrimary)?.barcode || item.barcodes?.[0]?.barcode || "",
-    barcodes: item.barcodes?.map((code) => code.barcode) || [],
-    image: item.imageUrl || "",
-    price: Number(item.prices?.[0]?.price || 0),
-    wholesalePrice: Number(item.prices?.[1]?.price || item.prices?.[0]?.price || 0),
-  }));
+  mapped.products = (remote.products || []).map((item) => {
+    const currentPrices = [...(item.prices || [])].sort((a, b) => Number(Boolean(b.priceList?.isDefault)) - Number(Boolean(a.priceList?.isDefault)));
+    const primaryPrice = currentPrices.find((entry) => entry.priceList?.isDefault) || currentPrices[0];
+    const secondaryPrice = currentPrices.find((entry) => entry.id !== primaryPrice?.id);
+    return {
+      ...relationDisplayFields(item, RELATION_KEYS),
+      barcode: item.barcodes?.find((code) => code.isPrimary)?.barcode || item.barcodes?.[0]?.barcode || "",
+      barcodes: item.barcodes?.map((code) => code.barcode) || [],
+      image: item.imageUrl || "",
+      price: Number(primaryPrice?.price || 0),
+      wholesalePrice: Number(secondaryPrice?.price ?? primaryPrice?.price ?? 0),
+      prices: currentPrices,
+      stocks: (item.stocks || []).map((stock) => ({ ...stock, onHand: Number(stock.onHand || 0), reserved: Number(stock.reserved || 0) })),
+    };
+  });
+  mapped.customers = (remote.customers || []).map((item) => {
+    const metadata = item.metadata && typeof item.metadata === "object" ? item.metadata : {};
+    return { ...relationDisplayFields(item, RELATION_KEYS), ...metadata, image: metadata.image || "", agentId: metadata.agentId || "", priceListId: metadata.priceListId || "",
+      customerType: metadata.customerType || "ORGANIZATION", category: metadata.category || "", territory: metadata.territory || "", debt: Number(item.balance || 0), creditLimit: Number(item.creditLimit || 0) };
+  });
+  mapped.suppliers = (remote.suppliers || []).map((item) => {
+    const metadata = item.metadata && typeof item.metadata === "object" ? item.metadata : {};
+    return { ...relationDisplayFields(item, RELATION_KEYS), ...metadata, image: metadata.image || "", contact: metadata.contact || "", balance: Number(item.balance || 0) };
+  });
   mapped.orders = (remote.orders || []).map((item) => ({
     ...relationDisplayFields(item, RELATION_KEYS),
     date: item.orderedAt || item.createdAt,
     items: (item.items || []).map((line) => ({ ...line, price: Number(line.unitPrice ?? line.price ?? 0) })),
   }));
   mapped.sales = mapped.orders.filter((item) => item.status === "COMPLETED");
-  mapped.balances = (remote.balances || []).map((item) => ({ ...item, onHand: Number(item.onHand), reserved: Number(item.reserved), available: Number(item.available) }));
+  mapped.balances = (remote.balances || []).filter((item) => !item.variantId && (!item.stockKey || item.stockKey === "BASE"))
+    .map((item) => ({ ...item, onHand: Number(item.onHand), reserved: Number(item.reserved), available: Number(item.available) }));
   mapped.workflowNotifications = (remote.workflowNotifications || []).map((item) => ({ ...item, read: item.status === "READ" }));
   mapped.pickLists = (remote.pickLists || []).map((item) => ({ ...item, picker: item.pickerEmployee?.name || "" }));
   mapped.employeeTypes = (remote.employeeTypes || []).map((item) => ({ ...item, system: item.isSystem }));
@@ -169,6 +186,40 @@ export function normalizeRemoteData(remote = {}) {
     toWarehouseName: item.toWarehouseName || item.targetWarehouseName || "—",
     productId: item.productId || item.items?.[0]?.productId || "",
     quantity: item.quantity ?? item.items?.[0]?.quantity ?? 0,
+  }));
+  mapped.adjustments = (mapped.adjustments || []).map((item) => ({
+    ...item,
+    date: item.date || item.createdAt,
+    productId: item.productId || item.items?.[0]?.productId || "",
+    quantity: Number(item.quantity ?? item.items?.[0]?.quantity ?? 0),
+    unitCost: Number(item.unitCost ?? item.items?.[0]?.unitCost ?? 0),
+  }));
+  mapped.inventoryCounts = (mapped.inventoryCounts || []).map((item) => {
+    const items = (item.items || []).map((line) => ({
+      ...line,
+      systemQty: Number(line.systemQty ?? line.expected ?? 0),
+      countedQty: line.countedQty ?? line.counted ?? "",
+      difference: Number(line.difference ?? 0),
+    }));
+    return {
+      ...item,
+      date: item.date || item.countedAt || item.createdAt,
+      items,
+      differences: item.differences ?? items.filter((line) => Number(line.difference) !== 0).length,
+    };
+  });
+  mapped.goodsReceipts = (mapped.goodsReceipts || []).map((item) => ({
+    ...item,
+    date: item.date || item.receivedAt || item.createdAt,
+    total: Number(item.total || 0),
+    items: (item.items || []).map((line) => ({
+      ...line,
+      quantity: Number(line.quantity || 0),
+      baseQuantity: Number(line.baseQuantity ?? line.quantity ?? 0),
+      conversionToBase: Number(line.conversionToBase || 1),
+      unitCost: Number(line.unitCost || 0),
+      total: Number(line.total || 0),
+    })),
   }));
   mapped.deliveryTrips = (mapped.deliveryTrips || []).map((item) => ({
     ...item,

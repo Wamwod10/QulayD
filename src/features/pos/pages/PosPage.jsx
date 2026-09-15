@@ -1,4 +1,4 @@
-import { Archive, Camera, Clock3, Expand, LayoutGrid, List, LogOut, Minus, Plus, ScanBarcode, ShoppingCart, Trash2, X } from "lucide-react";
+import { Archive, ArrowLeftRight, Banknote, Bell, Boxes, Camera, Check, ChevronDown, Clock3, CreditCard, Expand, History, Landmark, LayoutGrid, List, LoaderCircle, LogOut, Minus, Package, Plus, QrCode, ReceiptText, RotateCcw, ScanBarcode, Settings, ShoppingCart, Store, Trash2, UserPlus, Users, WalletCards, Warehouse, Wifi, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -10,9 +10,11 @@ import { useAuth } from "../../../hooks/useAuth";
 import { updateLocalDb, useLocalDb } from "../../../services/localDb";
 import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
+import { STORAGE_KEYS } from "../../../constants/storageKeys";
+import { getAggregateStock, getVariantStockAvailability } from "../../../services/inventorySelectors";
 import { completePosSale } from "../../../services/prototypeActions";
 import { formatDateTime, formatMoney, getName } from "../../../utils/formatters";
-import { findProductByScan, getProductBarcodes } from "../../../utils/productCodes";
+import { findProductSelectionByScan, getProductBarcodes } from "../../../utils/productCodes";
 
 function escapeHtml(value = "") {
   return String(value)
@@ -27,11 +29,12 @@ function escapeHtml(value = "") {
 function printPosReceipt({ sale, cart, companyName, branchName, warehouseName, cashierName, customerName, paymentMethod, paymentMethodName, received, change }) {
   if (typeof document === "undefined" || !cart?.length) return;
 
-  const total = cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+  const fallbackTotal = cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+  const total = Number(sale?.total ?? fallbackTotal);
   const receiptHeightMm = Math.max(94, 78 + cart.length * 13 + (paymentMethod === "CASH" ? 18 : 9));
   const rows = cart.map((item) => `
     <div class="item">
-      <div class="item-name">${escapeHtml(item.name)}</div>
+      <div class="item-name">${escapeHtml([item.name, item.variantName, item.packageName].filter(Boolean).join(" · "))}</div>
       <div class="item-row">
         <span>${Number(item.quantity)} × ${Number(item.price || 0).toLocaleString("uz-UZ")} so'm</span>
         <strong>${(Number(item.quantity) * Number(item.price || 0)).toLocaleString("uz-UZ")} so'm</strong>
@@ -149,67 +152,123 @@ function PosPage() {
   const [categoryName, setCategoryName] = useState("");
   const [categoryProductIds, setCategoryProductIds] = useState([]);
   const [now, setNow] = useState(new Date());
+  const [selector, setSelector] = useState(null);
+  const [selectedVariantId, setSelectedVariantId] = useState("");
+  const [selectedPackageId, setSelectedPackageId] = useState("");
+  const [selectedSerialIds, setSelectedSerialIds] = useState([]);
+  const [generalDiscount, setGeneralDiscount] = useState({ type: "PERCENT", value: "" });
+  const [dueAt, setDueAt] = useState("");
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [customerForm, setCustomerForm] = useState({ name: "", phone: "", creditLimit: "" });
+  const [receiptPreview, setReceiptPreview] = useState(null);
+  const [branchOpen, setBranchOpen] = useState(false);
+  const [shiftOpen, setShiftOpen] = useState(false);
+  const [shiftMode, setShiftMode] = useState("OPEN");
+  const [shiftBusy, setShiftBusy] = useState(false);
+  const [shiftForm, setShiftForm] = useState({ cashboxId: "", openingBalance: "", closingBalance: "", cashType: "CASH_IN", amount: "", description: "", note: "" });
+  const [selectedBranchId, setSelectedBranchId] = useState(() => {
+    if (typeof window === "undefined") return user?.branchId || "";
+    return window.localStorage.getItem(STORAGE_KEYS.selectedBranchId) || user?.branchId || "";
+  });
 
-  const activeWarehouses = useMemo(() => (db.warehouses || []).filter((warehouse) => warehouse.status === "ACTIVE"), [db.warehouses]);
+  const activeBranches = useMemo(() => (db.branches || []).filter((branch) => branch.status !== "INACTIVE"), [db.branches]);
+  const selectedBranch = activeBranches.find((branch) => branch.id === selectedBranchId) || user?.branch || activeBranches[0] || null;
+  const activeWarehouses = useMemo(() => (db.warehouses || []).filter((warehouse) => warehouse.status === "ACTIVE" && (!selectedBranchId || !warehouse.branchId || warehouse.branchId === selectedBranchId)), [db.warehouses, selectedBranchId]);
   const configuredWarehouse = activeWarehouses.find((warehouse) => warehouse.id === db.settings?.pos?.warehouseId);
   const defaultWarehouse = activeWarehouses.find((warehouse) => warehouse.id === db.settings?.company?.defaultWarehouseId);
   const warehouseId = configuredWarehouse?.id || defaultWarehouse?.id || activeWarehouses[0]?.id || "";
   const priceListId = db.settings.pos.priceListId || "pl-retail";
   const productView = db.settings.pos.productView === "list" ? "list" : "card";
+  const currentEmployeeId = user?.employeeId || user?.id || "";
+  const currentShift = (db.shifts || []).find((shift) => shift.status === "OPEN" && (!currentEmployeeId || shift.employeeId === currentEmployeeId));
+  const currentShiftCashbox = currentShift?.cashbox || (db.cashboxes || []).find((cashbox) => cashbox.id === currentShift?.cashboxId) || null;
+  const activeCashboxes = useMemo(() => (db.cashboxes || []).filter((cashbox) => cashbox.status === "ACTIVE"
+    && (!selectedBranchId || !cashbox.branchId || cashbox.branchId === selectedBranchId)
+    && (!warehouseId || !cashbox.warehouseId || cashbox.warehouseId === warehouseId)), [db.cashboxes, selectedBranchId, warehouseId]);
 
   useEffect(() => {
-    if (!warehouseId || db.settings?.pos?.warehouseId === warehouseId) return;
+    if (!activeBranches.length) return;
+    if (selectedBranchId && activeBranches.some((branch) => branch.id === selectedBranchId)) return;
+    const fallback = activeBranches.find((branch) => branch.id === user?.branchId) || activeBranches[0];
+    if (!fallback) return;
+    setSelectedBranchId(fallback.id);
+    if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEYS.selectedBranchId, fallback.id);
+  }, [activeBranches, selectedBranchId, user?.branchId]);
+
+  useEffect(() => {
+    const shiftBranchId = currentShiftCashbox?.branchId || "";
+    if (currentShift && shiftBranchId && shiftBranchId !== selectedBranchId && activeBranches.some((branch) => branch.id === shiftBranchId)) {
+      setSelectedBranchId(shiftBranchId);
+      if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEYS.selectedBranchId, shiftBranchId);
+    }
+    if (currentShift && currentShiftCashbox?.warehouseId && db.settings?.pos?.warehouseId !== currentShiftCashbox.warehouseId) {
+      updateLocalDb((draft) => { draft.settings.pos.warehouseId = currentShiftCashbox.warehouseId; });
+    }
+  }, [activeBranches, currentShift, currentShiftCashbox, db.settings?.pos?.warehouseId, selectedBranchId]);
+
+  useEffect(() => {
+    if (!warehouseId || currentShiftCashbox?.warehouseId || db.settings?.pos?.warehouseId === warehouseId) return;
     updateLocalDb((draft) => { draft.settings.pos.warehouseId = warehouseId; });
-  }, [db.settings?.pos?.warehouseId, warehouseId]);
+  }, [currentShiftCashbox?.warehouseId, db.settings?.pos?.warehouseId, warehouseId]);
 
-  const priceFor = (product) => ["pl-wholesale", "pl-vip"].includes(priceListId)
-    ? Number(product.wholesalePrice || product.price || 0)
-    : Number(product.price || 0);
+  const priceFor = (product, variant, productPackage) => Number(productPackage?.price ?? variant?.price ?? (["pl-wholesale", "pl-vip"].includes(priceListId)
+    ? product.wholesalePrice || product.price || 0 : product.price || 0));
 
-  const availableFor = (productId) => {
+  const availableFor = (productId, variantId = "") => {
     if (!warehouseId) return 0;
-    const balance = db.balances.find((item) => item.productId === productId && item.warehouseId === warehouseId);
-    return balance ? Math.max(0, Number(balance.onHand || 0) - Number(balance.reserved || 0)) : 0;
+    const product = db.products.find((item) => item.id === productId);
+    return variantId ? getVariantStockAvailability(product, db.balances, warehouseId, variantId)
+      : getAggregateStock(db.balances, productId, warehouseId).available;
   };
 
   const products = useMemo(() => {
     const query = search.trim().toLowerCase();
     return db.products.filter((product) => {
       const matchesCategory = categoryId === "ALL" || product.categoryId === categoryId;
-      const matchesSearch = !query || `${product.name} ${product.sku} ${getProductBarcodes(product).join(" ")}`.toLowerCase().includes(query);
+      const extraCodes = [...(product.variants || []).flatMap((item) => [item.name, item.sku, ...getProductBarcodes(item)]),
+        ...(product.packages || []).flatMap((item) => [item.name, ...getProductBarcodes(item)]), ...(product.serials || []).flatMap((item) => [item.serial, item.imei])];
+      const matchesSearch = !query || `${product.name} ${product.sku} ${getProductBarcodes(product).join(" ")} ${extraCodes.join(" ")}`.toLowerCase().includes(query);
       return product.status === "ACTIVE" && matchesCategory && matchesSearch;
     });
   }, [categoryId, db.products, search]);
 
-  const addProduct = (product) => {
-    const available = availableFor(product.id);
-    const currentQuantity = cart.find((item) => item.productId === product.id)?.quantity || 0;
-    if (!db.settings.inventory.allowNegativeStock && currentQuantity + 1 > available) {
-      notify(`${product.name} uchun mavjud qoldiq yetarli emas`, "warning");
-      return;
-    }
-    setCart((current) => {
-      const existing = current.find((item) => item.productId === product.id);
-      if (existing) return current.map((item) => item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item);
-      return [...current, { productId: product.id, name: product.name, sku: product.sku, quantity: 1, price: priceFor(product) }];
-    });
-    searchRef.current?.focus();
+  const cartKey = (productId, variantId = "", packageId = "") => `${productId}:${variantId || "base"}:${packageId || "base"}`;
+  const commitProduct = (product, variant = null, productPackage = null, serialIds = []) => {
+    const key = cartKey(product.id, variant?.id, productPackage?.id); const conversionToBase = Number(productPackage?.conversionToBase || 1);
+    const currentBase = cart.filter((item) => item.productId === product.id).reduce((sum, item) => sum + item.quantity * item.conversionToBase, 0);
+    const currentVariantBase = variant ? cart.filter((item) => item.productId === product.id && item.variantId === variant.id)
+      .reduce((sum, item) => sum + item.quantity * item.conversionToBase, 0) : currentBase;
+    if (!db.settings.inventory.allowNegativeStock && currentBase + conversionToBase > availableFor(product.id)) return notify(`${product.name} uchun umumiy qoldiq yetarli emas`, "warning");
+    if (!db.settings.inventory.allowNegativeStock && variant && currentVariantBase + conversionToBase > availableFor(product.id, variant.id)) return notify(`${product.name} · ${variant.name} varianti uchun qoldiq yetarli emas`, "warning");
+    const alreadySelected = new Set(cart.flatMap((item) => item.serialIds || []));
+    if (serialIds.some((id) => alreadySelected.has(id))) return notify("Tanlangan serial / IMEI savatda allaqachon mavjud", "warning");
+    setCart((current) => { const existing = current.find((item) => item.key === key);
+      if (existing) return current.map((item) => item.key === key ? { ...item, quantity: item.quantity + 1, serialIds: product.trackSerial ? [...(item.serialIds || []), ...serialIds] : item.serialIds } : item);
+      return [...current, { key, productId: product.id, variantId: variant?.id || "", packageId: productPackage?.id || "", variantName: variant?.name || "",
+        packageName: productPackage?.name || "", conversionToBase, name: product.name, sku: variant?.sku || product.sku, quantity: 1,
+        price: priceFor(product, variant, productPackage), discountType: "PERCENT", discountValue: "", serialIds }]; });
+    setSelector(null); setSelectedVariantId(""); setSelectedPackageId(""); setSelectedSerialIds([]); searchRef.current?.focus();
   };
-
-  const updateQuantity = (productId, delta) => {
-    const product = db.products.find((item) => item.id === productId);
-    setCart((current) => current.map((item) => {
-      if (item.productId !== productId) return item;
-      const next = Math.max(1, item.quantity + delta);
-      if (!db.settings.inventory.allowNegativeStock && next > availableFor(productId)) {
-        notify(`${product?.name || "Mahsulot"} uchun qoldiq yetarli emas`, "warning");
-        return item;
-      }
-      return { ...item, quantity: next };
-    }));
+  const addProduct = (product, exact = {}) => { const variants = (product.variants || []).filter((item) => item.status === "ACTIVE"); const packages = (product.packages || []).filter((item) => item.status === "ACTIVE");
+    const exactVariant = exact.variant || (exact.package?.variantId ? variants.find((item) => item.id === exact.package.variantId) : null);
+    if (!product.trackSerial && (exactVariant || (exact.package && !variants.length) || (!variants.length && !packages.length))) return commitProduct(product, exactVariant, exact.package);
+    setSelector(product); setSelectedVariantId(exactVariant?.id || (variants.length === 1 ? variants[0].id : "")); setSelectedPackageId(exact.package?.id || ""); setSelectedSerialIds(exact.serial?.id ? [exact.serial.id] : []); };
+  const updateQuantity = (key, value, absolute = false) => {
+    const selectedLine = cart.find((item) => item.key === key);
+    const selectedProduct = db.products.find((row) => row.id === selectedLine?.productId);
+    if (selectedProduct?.trackSerial) { notify("Serial / IMEI mahsulot miqdorini serial tanlash orqali o‘zgartiring", "warning"); return; }
+    setCart((current) => current.map((item) => { if (item.key !== key) return item;
+      const product = db.products.find((row) => row.id === item.productId); const unit = db.units.find((row) => row.id === product?.unitId); const raw = absolute ? Number(value) : item.quantity + Number(value);
+      const next = Math.max(unit?.precision > 0 ? 0.001 : 1, unit?.precision > 0 ? Math.round(raw * 1000) / 1000 : Math.round(raw));
+      const otherBase = current.filter((row) => row.productId === item.productId && row.key !== key).reduce((sum, row) => sum + row.quantity * row.conversionToBase, 0);
+      const otherVariantBase = item.variantId ? current.filter((row) => row.productId === item.productId && row.variantId === item.variantId && row.key !== key)
+        .reduce((sum, row) => sum + row.quantity * row.conversionToBase, 0) : otherBase;
+      if (!db.settings.inventory.allowNegativeStock && otherBase + next * item.conversionToBase > availableFor(item.productId)) { notify(`${product?.name || "Mahsulot"} uchun umumiy qoldiq yetarli emas`, "warning"); return item; }
+      if (!db.settings.inventory.allowNegativeStock && item.variantId && otherVariantBase + next * item.conversionToBase > availableFor(item.productId, item.variantId)) { notify(`${product?.name || "Mahsulot"} varianti uchun qoldiq yetarli emas`, "warning"); return item; }
+      return { ...item, quantity: next }; }));
   };
-
-  const removeLine = (productId) => setCart((current) => current.filter((item) => item.productId !== productId));
+  const removeLine = (key) => setCart((current) => current.filter((item) => item.key !== key));
 
   const openCategoryCreate = () => {
     setCategoryName("");
@@ -239,10 +298,15 @@ function PosPage() {
     draft.settings.pos.productView = view;
   });
   const totalQuantity = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const total = cart.reduce((sum, item) => sum + item.quantity * item.price, 0);
+  const subtotal = cart.reduce((sum, item) => sum + item.quantity * item.price, 0);
+  const itemDiscount = cart.reduce((sum, item) => { const gross = item.quantity * item.price; return sum + (item.discountType === "PERCENT" ? gross * Math.min(100, Number(item.discountValue) || 0) / 100 : Math.min(gross, Number(item.discountValue) || 0)); }, 0);
+  const generalDiscountAmount = generalDiscount.type === "PERCENT" ? (subtotal - itemDiscount) * Math.min(100, Number(generalDiscount.value) || 0) / 100 : Math.min(subtotal - itemDiscount, Number(generalDiscount.value) || 0);
+  const total = Math.max(0, Math.round((subtotal - itemDiscount - generalDiscountAmount) * 100) / 100);
   const received = Number(cashReceived) || 0;
-  const change = paymentMethod === "CASH" ? Math.max(0, received - total) : 0;
   const selectedCustomer = db.customers.find((customer) => customer.id === customerId);
+  const selectedPaymentConfig = (db.paymentMethods || []).find((item) => item.code === paymentMethod);
+  const selectedPaymentType = selectedPaymentConfig?.method || paymentMethod;
+  const change = selectedPaymentType === "CASH" ? Math.max(0, received - total) : 0;
 
   const quickCashValues = useMemo(() => {
     if (!total) return [];
@@ -251,6 +315,7 @@ function PosPage() {
   }, [total]);
 
   const checkout = async () => {
+    if (checkoutBusy || !cart.length) return;
     if (!warehouseId) {
       notify("Kassa uchun faol ombor topilmadi", "warning");
       return;
@@ -259,30 +324,39 @@ function PosPage() {
       notify("Bu kassada mijoz tanlash majburiy", "warning");
       return;
     }
-    if (paymentMethod === "CASH" && cashReceived && received < total) {
+    if (selectedPaymentType === "CASH" && !currentShift) {
+      notify("Naqd savdo uchun avval smenani oching", "warning");
+      openShiftManager("OPEN");
+      return;
+    }
+    if (selectedPaymentType === "CASH" && cashReceived && received < total) {
       notify("Qabul qilingan naqd summa jami summadan kam", "warning");
       return;
     }
+    if (selectedPaymentType === "CREDIT" && !customerId) return notify("Nasiya savdo uchun mijoz majburiy", "warning");
 
     const cartSnapshot = cart.map((item) => ({ ...item }));
-    const result = await completePosSale({ cart: cartSnapshot, customerId, warehouseId, paymentMethod });
-    notify(result.message, result.ok ? "success" : "danger");
+    setCheckoutBusy(true);
+    const result = await completePosSale({ cart: cartSnapshot, customerId, warehouseId, shiftId: currentShift?.id, priceListId: db.priceLists.some((list) => list.id === priceListId) ? priceListId : undefined,
+      paymentMethod, total, generalDiscount, dueAt: dueAt || undefined });
+    notify(result.message, result.ok ? "success" : "danger"); setCheckoutBusy(false);
 
-    if (result.ok && db.settings.pos.printReceipt === true) {
+    if (result.ok) {
       const warehouse = db.warehouses.find((item) => item.id === warehouseId);
-      printPosReceipt({
-        sale: result.sale,
+      const preview = {
+        sale: result.data?.order || result.sale?.order || result.sale,
         cart: cartSnapshot,
         companyName: db.settings.company.name || "Qulay",
         branchName: db.settings.company.branch || "",
         warehouseName: warehouse?.name || "",
         cashierName: user?.name || "Kassir",
         customerName: selectedCustomer?.name || "Anonim mijoz",
-        paymentMethod,
+        paymentMethod: selectedPaymentType,
         paymentMethodName: (db.paymentMethods || []).find((item) => item.code === paymentMethod)?.name,
-        received: paymentMethod === "CASH" ? (received || total) : total,
-        change,
-      });
+        received: selectedPaymentType === "CASH" ? (received || total) : total,
+        change };
+      setReceiptPreview(preview);
+      if (db.settings.pos.printReceipt === true) printPosReceipt(preview);
     }
 
     if (result.ok && db.settings.pos.clearCartAfterSale !== false) {
@@ -290,6 +364,7 @@ function PosPage() {
       setCustomerId("");
       setSearch("");
       setCashReceived("");
+      setGeneralDiscount({ type: "PERCENT", value: "" }); setDueAt("");
       setMobileView("products");
       searchRef.current?.focus();
     }
@@ -297,7 +372,10 @@ function PosPage() {
 
   const holdCart = async () => {
     if (!cart.length || db.settings.pos.allowHeldCarts === false) return;
-    try { await apiRequest({ url: "/pos/held-carts", body: { customerId: customerId || null, name: "Saqlangan savat", items: cart.map((item) => ({ productId: item.productId, quantity: Number(item.quantity), unitPrice: Number(item.price), discount: Number(item.discount || 0) })) } }); }
+    try { await apiRequest({ url: "/pos/held-carts", body: { customerId: customerId || null, name: `Chek #${db.heldCarts.length + 1}`, items: cart.map((item) => ({
+      productId: item.productId, variantId: item.variantId || null, packageId: item.packageId || null, quantity: Number(item.quantity),
+      baseQuantity: item.quantity * item.conversionToBase, conversionToBase: item.conversionToBase, unitPrice: Number(item.price), serialIds: item.serialIds || [],
+      discountAmount: item.discountType === "FIXED" ? Number(item.discountValue || 0) : 0 })) } }); }
     catch (error) { notify(error.message, "danger"); return; }
     setCart([]);
     setCustomerId("");
@@ -306,7 +384,9 @@ function PosPage() {
   };
 
   const restoreCart = async (held) => {
-    setCart((held.items || held.cart || []).map((item) => ({ ...item, price: Number(item.unitPrice ?? item.price), name: item.product?.name || item.name })));
+    setCart((held.items || held.cart || []).map((item) => ({ ...item, key: cartKey(item.productId, item.variantId, item.packageId),
+      conversionToBase: Number(item.conversionToBase || 1), price: Number(item.unitPrice ?? item.price), name: item.product?.name || item.name,
+      sku: item.variant?.sku || item.product?.sku || item.sku, variantName: item.variant?.name || "", packageName: item.package?.name || "", serialIds: Array.isArray(item.serialIds) ? item.serialIds : [], discountType: "FIXED", discountValue: String(item.discount || "") })));
     setCustomerId(held.customerId || "");
     setPaymentMethod(held.paymentMethod || "CASH");
     try { await apiRequest({ url: `/pos/held-carts/${held.id}`, method: "DELETE" }); } catch (error) { notify(error.message, "danger"); return; }
@@ -315,13 +395,13 @@ function PosPage() {
   };
 
   const addScannedValue = (rawValue) => {
-    const product = findProductByScan(db.products, rawValue);
-    if (!product) {
+    const selection = findProductSelectionByScan(db.products, rawValue);
+    if (!selection) {
       setSearch(String(rawValue || "").trim());
       notify("Bu kod bo‘yicha mahsulot topilmadi", "warning");
       return;
     }
-    addProduct(product);
+    addProduct(selection.product, selection);
     setSearch("");
   };
 
@@ -344,10 +424,10 @@ function PosPage() {
 
   const handleSearchKeyDown = (event) => {
     if (event.key !== "Enter") return;
-    const exact = findProductByScan(db.products, search);
+    const exact = findProductSelectionByScan(db.products, search);
     if (exact && db.settings.pos.barcodeAutoAdd !== false) {
       event.preventDefault();
-      addProduct(exact);
+      addProduct(exact.product, exact);
       setSearch("");
       return;
     }
@@ -356,6 +436,63 @@ function PosPage() {
       addProduct(products[0]);
       setSearch("");
     }
+  };
+
+  const openShiftManager = (mode = currentShift ? "CASH" : "OPEN") => {
+    const cashboxId = currentShift?.cashboxId || activeCashboxes[0]?.id || "";
+    setShiftMode(mode);
+    setShiftForm((current) => ({
+      ...current,
+      cashboxId,
+      openingBalance: mode === "OPEN" ? String(activeCashboxes.find((item) => item.id === cashboxId)?.balance || 0) : current.openingBalance,
+      closingBalance: mode === "CLOSE" ? String(currentShift?.expectedCash ?? currentShift?.cashbox?.balance ?? 0) : current.closingBalance,
+      amount: "", description: "", note: "",
+    }));
+    setShiftOpen(true);
+  };
+
+  const submitShiftAction = async (event) => {
+    event.preventDefault();
+    if (shiftBusy) return;
+    setShiftBusy(true);
+    try {
+      if (shiftMode === "OPEN") {
+        if (!shiftForm.cashboxId) throw new Error("Faol kassa tanlang");
+        await apiRequest({ url: "/pos/shifts/open", body: { cashboxId: shiftForm.cashboxId, openingBalance: Number(shiftForm.openingBalance || 0), note: shiftForm.note.trim() || undefined } });
+        notify("Smena ochildi");
+      } else if (shiftMode === "CLOSE") {
+        if (!currentShift?.id) throw new Error("Ochiq smena topilmadi");
+        await apiRequest({ url: `/pos/shifts/${currentShift.id}/close`, body: { closingBalance: Number(shiftForm.closingBalance || 0), note: shiftForm.note.trim() || undefined } });
+        notify("Smena yopildi");
+      } else {
+        if (!currentShift?.id) throw new Error("Avval smenani oching");
+        if (!(Number(shiftForm.amount) > 0)) throw new Error("Summani kiriting");
+        await apiRequest({ url: `/pos/shifts/${currentShift.id}/cash`, body: { type: shiftForm.cashType, amount: Number(shiftForm.amount), description: shiftForm.description.trim() || (shiftForm.cashType === "CASH_OUT" ? "Kassadan chiqim" : "Kassaga kirim") } });
+        notify(shiftForm.cashType === "CASH_OUT" || shiftForm.cashType === "EXPENSE" ? "Kassa chiqimi yozildi" : "Kassa kirimi yozildi");
+      }
+      setShiftOpen(false);
+    } catch (error) { notify(error.message, "danger"); }
+    finally { setShiftBusy(false); }
+  };
+
+  const changeBranch = (branchId) => {
+    const branch = activeBranches.find((item) => item.id === branchId);
+    if (!branch) return;
+    const shiftBranchId = currentShiftCashbox?.branchId || "";
+    if (currentShift && shiftBranchId && shiftBranchId !== branch.id) { notify("Ochiq smena vaqtida boshqa filialga o‘tib bo‘lmaydi. Avval smenani yoping.", "warning"); return; }
+    if (cart.length && !window.confirm("Filialni almashtirsangiz joriy savat tozalanadi. Davom etasizmi?")) return;
+    setSelectedBranchId(branch.id);
+    if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEYS.selectedBranchId, branch.id);
+    updateLocalDb((draft) => {
+      draft.settings.company.branch = branch.name;
+      const preferred = (draft.warehouses || []).find((warehouse) => warehouse.status === "ACTIVE" && (!warehouse.branchId || warehouse.branchId === branch.id));
+      if (preferred) draft.settings.pos.warehouseId = preferred.id;
+    });
+    setCart([]);
+    setCustomerId("");
+    setCashReceived("");
+    setBranchOpen(false);
+    notify(`${branch.name} filialiga o‘tildi`);
   };
 
   const toggleFullscreen = async () => {
@@ -367,94 +504,185 @@ function PosPage() {
     }
   };
 
+  const createCustomer = async (event) => {
+    event.preventDefault(); if (!customerForm.name.trim()) return;
+    try { const customer = await apiRequest({ url: "/customers", body: { code: `CUS-${Date.now().toString(36).toUpperCase()}`, name: customerForm.name.trim(),
+      phone: customerForm.phone.trim() || undefined, creditLimit: Number(customerForm.creditLimit || 0), status: "ACTIVE" } });
+      setCustomerId(customer.id); setCustomerOpen(false); setCustomerForm({ name: "", phone: "", creditLimit: "" }); notify("Mijoz yaratildi");
+    } catch (error) { notify(error.message, "danger"); }
+  };
+
+  useEffect(() => {
+    if ((db.paymentMethods || []).some((item) => item.status === "ACTIVE" && item.code === paymentMethod)) return;
+    const first = (db.paymentMethods || []).find((item) => item.status === "ACTIVE"); if (first) setPaymentMethod(first.code);
+  }, [db.paymentMethods, paymentMethod]);
+
+  const paymentIcon = (method) => {
+    const type = method?.method || method?.code || "";
+    if (type === "CASH") return <Banknote size={18}/>;
+    if (type === "CARD") return <CreditCard size={18}/>;
+    if (type === "QR") return <QrCode size={18}/>;
+    if (type === "CREDIT") return <WalletCards size={18}/>;
+    if (type === "BANK") return <Landmark size={18}/>;
+    return <WalletCards size={18}/>;
+  };
+
+  const posNavItems = [
+    { label: "Kassa", icon: ShoppingCart, active: true },
+    { label: "Ochiq cheklar", icon: ReceiptText, badge: (db.heldCarts || []).length, action: () => setShowHeld(true) },
+    { label: "Mijozlar", icon: Users, action: () => navigate("/customers") },
+    { label: "Savdo tarixi", icon: History, action: () => navigate("/orders") },
+    { label: "Qaytarish", icon: RotateCcw, action: () => navigate("/returns") },
+    { label: "Mahsulotlar", icon: Boxes, action: () => navigate("/inventory/products") },
+    { label: "Ombor", icon: Warehouse, action: () => navigate("/inventory") },
+    { label: "Moliya", icon: WalletCards, action: () => navigate("/finance") },
+  ];
+
   return (
     <>
       <MobilePinGate />
-      <div className="qp-pos-focus">
-      <header className="qp-pos-focus-header">
-        <div className="qp-pos-brand"><span>Q</span><div><strong>Kassa rejimi</strong><small>Tezkor savdo ish maydoni</small></div></div>
-        <div className="qp-pos-context">
-          <span><ScanBarcode size={15} /> {getName(db.warehouses, warehouseId) || "Ombor tanlanmagan"}</span>
-          <span><Clock3 size={15} /> {now.toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" })}</span>
-          <span>{user?.name || "Kassir"}</span>
-        </div>
-        <div className="qp-inline-actions">
-          {db.settings.mobile?.cameraScanner !== false ? <button type="button" className="qp-icon-button qp-pos-camera-button" title="Kamera bilan skanerlash" onClick={() => setScannerOpen(true)}><Camera size={17} /></button> : null}
-          <button type="button" className="qp-icon-button" title="To‘liq ekran" onClick={toggleFullscreen}><Expand size={17} /></button>
-          <button type="button" className="qp-button qp-button-secondary qp-pos-exit-button" aria-label="Kassadan chiqish" title="Kassadan chiqish" onClick={() => { if (window.opener) window.close(); else navigate("/orders"); }}><LogOut size={17} /><span>Kassadan chiqish</span></button>
-        </div>
-      </header>
-
-      <div className="qp-pos-command-row">
-        <div className="qp-pos-search-wrap qp-pos-search-primary">
-          <ScanBarcode size={20} />
-          <input ref={searchRef} className="qp-input" type="search" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={handleSearchKeyDown} placeholder="Mahsulot qidiring yoki shtrix-kodni skaner qiling..." />
-          {search ? <button type="button" onClick={() => setSearch("")} aria-label="Qidiruvni tozalash"><X size={15} /></button> : null}
-          {db.settings.mobile?.cameraScanner !== false ? <button type="button" className="qp-pos-inline-camera" onClick={() => setScannerOpen(true)} aria-label="Kamera bilan skanerlash"><Camera size={16}/></button> : null}
-          <kbd>F2</kbd>
-        </div>
-        <div className="qp-pos-shortcut-mini"><span><kbd>Enter</kbd> Qo‘shish</span><span><kbd>F4</kbd> Mijoz</span><span><kbd>F8</kbd> To‘lov</span></div>
-      </div>
-
-      <nav className="qp-pos-mobile-switch" aria-label="Kassa mobil bo‘limlari">
-        <button type="button" className={mobileView === "products" ? "active" : ""} onClick={() => setMobileView("products")}><ScanBarcode size={18} /> Mahsulotlar</button>
-        <button type="button" className={mobileView === "cart" ? "active" : ""} onClick={() => setMobileView("cart")}><ShoppingCart size={18} /> Savat <span>{cart.length}</span></button>
-      </nav>
-
-      <div className="qp-pos-focus-grid">
-        <section className={`qp-pos-products-panel ${mobileView === "products" ? "is-mobile-active" : ""}`}>
-          <div className="qp-pos-products-toolbar">
-            <div className="qp-category-tabs qp-pos-category-tabs">
-              <button type="button" className={categoryId === "ALL" ? "active" : ""} onClick={() => setCategoryId("ALL")}>Barchasi</button>
-              {db.categories.filter((category) => category.status !== "INACTIVE").map((category) => <button key={category.id} type="button" className={categoryId === category.id ? "active" : ""} onClick={() => setCategoryId(category.id)}>{category.name}</button>)}
-              <button type="button" className="qp-pos-new-category" onClick={openCategoryCreate}><Plus size={16}/> Yangi</button>
-            </div>
-            <div className="qp-pos-view-switch" role="group" aria-label="Mahsulot ko‘rinishi">
-              <button type="button" className={productView === "card" ? "active" : ""} onClick={() => changeProductView("card")} title="Kartochka ko‘rinishi" aria-label="Kartochka ko‘rinishi"><LayoutGrid size={18}/></button>
-              <button type="button" className={productView === "list" ? "active" : ""} onClick={() => changeProductView("list")} title="Ro‘yxat ko‘rinishi" aria-label="Ro‘yxat ko‘rinishi"><List size={18}/></button>
-            </div>
-          </div>
-
-          <div className="qp-pos-product-scroll">
-            <div className={`qp-product-grid qp-product-grid-focus ${productView === "list" ? "is-list-view" : "is-card-view"}`}>
-              {products.map((product) => {
-                const available = availableFor(product.id);
-                return <button type="button" className={`qp-product-tile qp-product-tile-focus ${available <= 0 ? "out" : ""}`} key={product.id} onClick={() => addProduct(product)} disabled={available <= 0 && !db.settings.inventory.allowNegativeStock}>
-                  {product.image ? <img className="qp-product-visual qp-product-visual-image" src={product.image} alt=""/> : <span className="qp-product-visual" aria-hidden="true">{product.name.slice(0, 1).toUpperCase()}</span>}
-                  <div className="qp-product-tile-copy"><strong>{product.name}</strong><small>{product.sku}</small></div>
-                  <div className="qp-product-tile-bottom"><b>{formatMoney(priceFor(product))}</b>{db.settings.pos.showStockBadge !== false ? <span className={available <= 0 ? "danger" : available <= Number(product.minStock || 0) ? "warning" : ""}>{available} sotish mumkin</span> : null}</div>
-                </button>;
-              })}
-            </div>
-            {!products.length ? <div className="qp-empty"><strong>Mahsulot topilmadi</strong><span>Qidiruvni yoki kategoriyani o‘zgartiring.</span></div> : null}
-          </div>
-        </section>
-
-        <aside className={`qp-pos-checkout-panel ${mobileView === "cart" ? "is-mobile-active" : ""}`}>
-          <div className="qp-pos-cart-head"><div><h2><ShoppingCart size={19} /> Savat</h2><p>{cart.length ? `${cart.length} tur · ${totalQuantity} dona · ${formatMoney(total)}` : "Sotuvni boshlash uchun mahsulot qo‘shing"}</p></div><div className="qp-inline-actions">{db.settings.pos.allowHeldCarts !== false ? <button type="button" className="qp-icon-button" title="Saqlangan savatlar" onClick={() => setShowHeld((value) => !value)}><Archive size={17} /><span className="qp-mini-count">{db.heldCarts.length}</span></button> : null}{cart.length ? <button type="button" className="qp-icon-button" title="Savatni tozalash" onClick={() => setCart([])}><Trash2 size={17} /></button> : null}</div></div>
-
-          {showHeld ? <div className="qp-held-carts qp-held-carts-focus">{db.heldCarts.length ? db.heldCarts.map((held) => <button type="button" key={held.id} onClick={() => restoreCart(held)}><strong>{held.cart?.length || 0} tur · {formatMoney((held.cart || []).reduce((sum, item) => sum + item.price * item.quantity, 0))}</strong><span>{formatDateTime(held.createdAt)}</span></button>) : <div className="qp-muted">Saqlangan savat yo‘q</div>}</div> : null}
-
-          <div className="qp-cart-lines qp-cart-lines-focus">
-            {cart.length ? cart.map((line) => <div className="qp-cart-line qp-cart-line-focus" key={line.productId}><div className="qp-cart-line-top"><div><strong>{line.name}</strong><span>SKU {line.sku || "—"} · {formatMoney(line.price)}</span></div><button type="button" className="qp-icon-button" onClick={() => removeLine(line.productId)} aria-label="Mahsulotni savatdan o‘chirish"><Trash2 size={15} /></button></div><div className="qp-qty"><div className="qp-qty-controls"><button type="button" onClick={() => updateQuantity(line.productId, -1)}><Minus size={14} /></button><strong>{line.quantity}</strong><button type="button" onClick={() => updateQuantity(line.productId, 1)}><Plus size={14} /></button></div><strong>{formatMoney(line.quantity * line.price)}</strong></div></div>) : <div className="qp-pos-empty-cart"><ShoppingCart size={34} /><strong>Savat bo‘sh</strong><span>Mahsulotni bosing yoki shtrix-kodni skaner qiling</span></div>}
-          </div>
-
-          <div className="qp-pos-payment-area">
-            <label className="qp-field"><span>Mijoz</span><Select data-pos-customer value={customerId} onChange={(event) => setCustomerId(event.target.value)}>{db.settings.pos.allowAnonymousCustomer !== false ? <option value="">Anonim mijoz</option> : <option value="">Mijozni tanlang</option>}{db.customers.map((customer) => <option value={customer.id} key={customer.id}>{customer.name}{Number(customer.debt || 0) > 0 ? ` · qarz ${formatMoney(customer.debt)}` : ""}</option>)}</Select></label>
-            {selectedCustomer ? <div className="qp-pos-customer-meta"><span>Joriy qarz <strong>{formatMoney(selectedCustomer.debt || 0)}</strong></span><span>Kredit limiti <strong>{formatMoney(selectedCustomer.creditLimit || 0)}</strong></span></div> : null}
-
-            <div className="qp-payment-methods qp-payment-methods-focus">{(db.paymentMethods || []).filter((item) => item.status === "ACTIVE").map((method) => <button type="button" key={method.id} title={method.shortcut || undefined} className={`qp-payment-method ${paymentMethod === method.code ? "active" : ""}`} onClick={() => setPaymentMethod(method.code)}>{method.name}</button>)}</div>
-
-            {paymentMethod === "CASH" ? <div className="qp-pos-cash-section"><div className="qp-pos-cash-grid"><label className="qp-field"><span>Qabul qilindi</span><input className="qp-input" inputMode="numeric" value={cashReceived} onChange={(event) => setCashReceived(event.target.value.replace(/[^0-9.]/g, ""))} placeholder={String(total || 0)} /></label><div className="qp-pos-change"><span>Qaytim</span><strong>{formatMoney(change)}</strong></div></div>{quickCashValues.length ? <div className="qp-pos-quick-cash">{quickCashValues.map((value) => <button key={value} type="button" onClick={() => setCashReceived(String(value))}>{value === total ? "Aniq summa" : formatMoney(value)}</button>)}</div> : null}</div> : null}
-
-            <div className="qp-pos-total-box"><div><span>Mahsulotlar</span><strong>{totalQuantity} dona</strong></div><div><span>Tur</span><strong>{cart.length}</strong></div><div className="primary"><span>Jami</span><strong>{formatMoney(total)}</strong></div></div>
-
-            <div className="qp-pos-cart-actions">{db.settings.pos.allowHeldCarts !== false ? <SecondaryButton disabled={!cart.length} onClick={holdCart}><Archive size={15} /> Saqlab turish</SecondaryButton> : null}<PrimaryButton disabled={!cart.length || (!customerId && db.settings.pos.allowAnonymousCustomer === false)} onClick={checkout}>To‘lovni yakunlash <kbd>F8</kbd></PrimaryButton></div>
+      <div className="qp-pos-pro-shell">
+        <aside className="qp-pos-rail">
+          <div className="qp-pos-rail-brand"><span>Q</span><div><strong>qulay</strong><small>EKOTIZIM</small></div></div>
+          <div className="qp-pos-rail-group-label">SAVDO</div>
+          <nav className="qp-pos-rail-nav">
+            {posNavItems.map((item) => { const Icon = item.icon; return <button type="button" key={item.label} className={item.active ? "active" : ""} onClick={item.action}><Icon size={18}/><span>{item.label}</span>{item.badge ? <b>{item.badge}</b> : null}</button>; })}
+          </nav>
+          <div className="qp-pos-rail-footer">
+            <button type="button" onClick={() => navigate("/settings/general")}><Settings size={18}/><span>Boshqaruv</span></button>
+            <button type="button" className="qp-pos-rail-branch qp-pos-rail-branch-action" onClick={() => openShiftManager(currentShift ? "CASH" : "OPEN")}><Store size={18}/><div><strong>{selectedBranch?.name || db.settings.company.branch || "Filial"}</strong><span>{currentShift ? `Smena ochiq · ${formatMoney(currentShift.expectedCash || 0)}` : "Smena yopiq · Ochish"}</span></div></button>
+            <div className="qp-pos-rail-user"><span>{(user?.name || "K").slice(0,1).toUpperCase()}</span><div><strong>{user?.name || "Kassir"}</strong><small>{now.toLocaleDateString("uz-UZ")} · {now.toLocaleTimeString("uz-UZ", { hour: "2-digit", minute: "2-digit" })}</small></div></div>
           </div>
         </aside>
+
+        <div className="qp-pos-stage">
+          <header className="qp-pos-pro-header">
+            <div className="qp-pos-pro-title"><ShoppingCart size={22}/><div><strong>Kassa</strong><span className={currentShift ? "online" : "offline"}><i/>{currentShift ? "Online" : "Smena yopiq"}</span></div></div>
+            <div className="qp-pos-pro-context">
+              <button type="button" className="qp-pos-context-button" onClick={() => setBranchOpen(true)}><Store size={17}/><span>{selectedBranch?.name || db.settings.company.branch || "Filial"}</span><ChevronDown size={14}/></button>
+              <span className="qp-pos-signal"><Wifi size={18}/></span>
+              <button type="button" className={`qp-pos-shift-chip ${currentShift ? "open" : "closed"}`} onClick={() => openShiftManager(currentShift ? "CASH" : "OPEN")}><Banknote size={16}/><span>{currentShift ? "Smena" : "Smenani ochish"}</span></button>
+              <button type="button" className="qp-pos-icon-top" aria-label="Bildirishnomalar" onClick={() => navigate("/notifications")}><Bell size={18}/><i>{(db.workflowNotifications || db.notifications || []).filter((item) => !item.read && !item.readAt).length || ""}</i></button>
+              {db.settings.mobile?.cameraScanner !== false ? <button type="button" className="qp-pos-icon-top" title="Kamera bilan skanerlash" onClick={() => setScannerOpen(true)}><Camera size={18}/></button> : null}
+              <button type="button" className="qp-pos-icon-top" title="To‘liq ekran" onClick={toggleFullscreen}><Expand size={18}/></button>
+              <div className="qp-pos-user-chip"><span>{(user?.name || "K").slice(0,2).toUpperCase()}</span><div><strong>{user?.name || "Kassir"}</strong><small>Kassir</small></div></div>
+              <button type="button" className="qp-pos-icon-top" title="Kassadan chiqish" onClick={() => { if (window.opener) window.close(); else navigate("/orders"); }}><LogOut size={18}/></button>
+            </div>
+          </header>
+
+          <div className="qp-pos-check-strip">
+            <button type="button" className="qp-pos-check-summary" onClick={() => setShowHeld((value) => !value)}><ReceiptText size={16}/><span>Ochiq chek</span><b>{(db.heldCarts || []).length + 1}</b></button>
+            <div className="qp-pos-check-tabs-pro"><button type="button" className="active" aria-current="true" onClick={() => { setMobileView("products"); searchRef.current?.focus(); }}><span>#1</span><strong>{formatMoney(total)}</strong></button>{(db.heldCarts || []).slice(0, 4).map((held, index) => <button type="button" key={held.id} onClick={() => restoreCart(held)}><span>#{index + 2}</span><strong>{formatMoney((held.items || held.cart || []).reduce((sum, item) => sum + Number(item.unitPrice ?? item.price) * Number(item.quantity), 0))}</strong></button>)}</div>
+            <button type="button" className="qp-pos-new-check" onClick={() => { if (cart.length) holdCart(); else searchRef.current?.focus(); }}><Plus size={17}/> Yangi chek</button>
+          </div>
+
+          <nav className="qp-pos-mobile-switch" aria-label="Kassa mobil bo‘limlari">
+            <button type="button" className={mobileView === "products" ? "active" : ""} onClick={() => setMobileView("products")}><ScanBarcode size={18} /> Mahsulotlar</button>
+            <button type="button" className={mobileView === "cart" ? "active" : ""} onClick={() => setMobileView("cart")}><ShoppingCart size={18} /> Savat <span>{cart.length}</span></button>
+          </nav>
+
+          <div className="qp-pos-pro-grid">
+            <section className={`qp-pos-products-panel qp-pos-products-pro ${mobileView === "products" ? "is-mobile-active" : ""}`}>
+              <div className="qp-pos-search-actions-row">
+                <div className="qp-pos-search-wrap qp-pos-search-pro">
+                  <ScanBarcode size={20}/>
+                  <input ref={searchRef} className="qp-input" type="search" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={handleSearchKeyDown} placeholder="Mahsulot qidiring (nomi, shtrix-kod, SKU, IMEI...)" />
+                  {search ? <button type="button" onClick={() => setSearch("")} aria-label="Qidiruvni tozalash"><X size={15}/></button> : null}
+                  {db.settings.mobile?.cameraScanner !== false ? <button type="button" className="qp-pos-inline-camera" onClick={() => setScannerOpen(true)} aria-label="Kamera bilan skanerlash"><Camera size={16}/></button> : null}
+                </div>
+                <button type="button" className="qp-pos-utility-action return" onClick={() => navigate("/returns")}><RotateCcw size={17}/><span>Qaytarish</span></button>
+                <button type="button" className="qp-pos-utility-action" onClick={() => navigate("/orders")}><ArrowLeftRight size={17}/><span>Savdo tarixi</span></button>
+              </div>
+
+              <div className="qp-pos-products-toolbar">
+                <div className="qp-category-tabs qp-pos-category-tabs qp-pos-category-tabs-pro">
+                  <button type="button" className={categoryId === "ALL" ? "active" : ""} onClick={() => setCategoryId("ALL")}><LayoutGrid size={15}/> Barchasi</button>
+                  {db.categories.filter((category) => category.status !== "INACTIVE").map((category) => <button key={category.id} type="button" className={categoryId === category.id ? "active" : ""} onClick={() => setCategoryId(category.id)}>{category.name}</button>)}
+                  <button type="button" className="qp-pos-new-category" onClick={openCategoryCreate}><Plus size={16}/> Kategoriya</button>
+                </div>
+                <div className="qp-pos-view-switch" role="group" aria-label="Mahsulot ko‘rinishi"><button type="button" className={productView === "card" ? "active" : ""} onClick={() => changeProductView("card")} title="Kartochka ko‘rinishi"><LayoutGrid size={18}/></button><button type="button" className={productView === "list" ? "active" : ""} onClick={() => changeProductView("list")} title="Ro‘yxat ko‘rinishi"><List size={18}/></button></div>
+              </div>
+
+              <div className="qp-pos-product-scroll">
+                <div className={`qp-product-grid qp-product-grid-focus qp-product-grid-pro ${productView === "list" ? "is-list-view" : "is-card-view"}`}>
+                  {products.map((product) => { const available = availableFor(product.id); const unit = getName(db.units, product.unitId) || "dona"; return <button type="button" className={`qp-product-tile qp-product-tile-focus qp-product-card-pro ${available <= 0 ? "out" : ""}`} key={product.id} onClick={() => addProduct(product)} disabled={available <= 0 && !db.settings.inventory.allowNegativeStock}>
+                    <div className="qp-product-card-media">{product.image ? <img src={product.image} alt=""/> : <span>{product.name.slice(0,1).toUpperCase()}</span>}{product.trackSerial ? <i>IMEI</i> : product.variants?.length ? <i>{product.variants.length} variant</i> : product.packages?.length ? <i>{product.packages.length} qadoq</i> : null}</div>
+                    <div className="qp-product-card-copy"><strong>{product.name}</strong><small>{available} {unit} · SKU {product.sku}</small><b>{formatMoney(priceFor(product))}</b></div>
+                  </button>; })}
+                </div>
+                {!products.length ? <div className="qp-empty"><strong>Mahsulot topilmadi</strong><span>Qidiruvni yoki kategoriyani o‘zgartiring.</span></div> : null}
+              </div>
+            </section>
+
+            <aside className={`qp-pos-checkout-panel qp-pos-checkout-pro ${mobileView === "cart" ? "is-mobile-active" : ""}`}>
+              <div className="qp-pos-customer-pro">
+                <div className="qp-pos-customer-head"><div><Users size={18}/><strong>Mijoz tanlash</strong></div><button type="button" className="qp-pos-add-customer" title="Yangi mijoz" onClick={() => setCustomerOpen(true)}><Plus size={18}/></button></div>
+                <div className="qp-pos-customer-select"><Users size={17}/><Select data-pos-customer value={customerId} onChange={(event) => setCustomerId(event.target.value)}>{db.settings.pos.allowAnonymousCustomer !== false ? <option value="">Anonim mijoz</option> : <option value="">Mijozni tanlang</option>}{db.customers.map((customer) => <option value={customer.id} key={customer.id}>{customer.name}{customer.phone ? ` · ${customer.phone}` : ""}</option>)}</Select></div>
+                {selectedCustomer ? <div className="qp-pos-customer-meta"><span>Joriy qarz <strong>{formatMoney(selectedCustomer.debt || 0)}</strong></span><span>Kredit limiti <strong>{formatMoney(selectedCustomer.creditLimit || 0)}</strong></span></div> : null}
+              </div>
+
+              <div className="qp-pos-cart-head qp-pos-cart-head-pro"><div><h2><ShoppingCart size={20}/> Savat <span>({cart.length})</span></h2><p>{cart.length ? `${totalQuantity} birlik · ${formatMoney(total)}` : "Sotuvni boshlash uchun mahsulot qo‘shing"}</p></div><div className="qp-inline-actions">{db.settings.pos.allowHeldCarts !== false ? <button type="button" className="qp-icon-button" title="Saqlangan savatlar" onClick={() => setShowHeld((value) => !value)}><Archive size={17}/>{db.heldCarts.length ? <span className="qp-mini-count">{db.heldCarts.length}</span> : null}</button> : null}{cart.length ? <button type="button" className="qp-icon-button qp-danger-ghost" title="Savatni tozalash" onClick={() => setCart([])}><Trash2 size={17}/></button> : null}</div></div>
+              {showHeld ? <div className="qp-held-carts qp-held-carts-focus qp-held-carts-pro">{db.heldCarts.length ? db.heldCarts.map((held) => <button type="button" key={held.id} onClick={() => restoreCart(held)}><strong>{(held.items || held.cart)?.length || 0} tur · {formatMoney((held.items || held.cart || []).reduce((sum, item) => sum + Number(item.unitPrice ?? item.price) * Number(item.quantity), 0))}</strong><span>{formatDateTime(held.createdAt)}</span></button>) : <div className="qp-muted">Saqlangan savat yo‘q</div>}</div> : null}
+
+              <div className="qp-cart-lines qp-cart-lines-focus qp-cart-lines-pro">
+                {cart.length ? cart.map((line, index) => <div className="qp-cart-line qp-cart-line-focus qp-cart-line-pro" key={line.key}><span className="qp-cart-row-number">{index + 1}</span><div className="qp-cart-product-cell"><strong>{line.name}</strong><span>{[line.variantName, line.packageName].filter(Boolean).join(" · ") || `SKU ${line.sku || "—"}`}</span></div><div className="qp-qty-controls qp-qty-controls-pro"><button type="button" disabled={Boolean(line.serialIds?.length)} onClick={() => updateQuantity(line.key, -1)}><Minus size={13}/></button><input value={line.quantity} disabled={Boolean(line.serialIds?.length)} inputMode="decimal" onChange={(event) => updateQuantity(line.key, event.target.value, true)}/><button type="button" disabled={Boolean(line.serialIds?.length)} onClick={() => updateQuantity(line.key, 1)}><Plus size={13}/></button></div><div className="qp-cart-price-cell"><small>{formatMoney(line.price)}</small><strong>{formatMoney(Math.max(0, line.quantity * line.price - (line.discountType === "PERCENT" ? line.quantity * line.price * Math.min(100,Number(line.discountValue)||0)/100 : Number(line.discountValue)||0)))}</strong></div><div className="qp-line-discount qp-line-discount-pro"><select value={line.discountType} onChange={(event) => setCart((current) => current.map((item) => item.key === line.key ? {...item,discountType:event.target.value}:item))}><option value="PERCENT">%</option><option value="FIXED">UZS</option></select><input inputMode="decimal" placeholder="0" value={line.discountValue} onChange={(event) => setCart((current) => current.map((item) => item.key === line.key ? {...item,discountValue:event.target.value.replace(/[^0-9.]/g,'')}:item))}/></div><button type="button" className="qp-cart-remove-pro" onClick={() => removeLine(line.key)} aria-label="Mahsulotni savatdan o‘chirish"><Trash2 size={15}/></button></div>) : <div className="qp-pos-empty-cart"><ShoppingCart size={34}/><strong>Savat bo‘sh</strong><span>Mahsulotni bosing yoki shtrix-kodni skaner qiling</span></div>}
+              </div>
+
+              <div className="qp-pos-payment-area qp-pos-payment-pro">
+                <div className="qp-general-discount qp-general-discount-pro"><span>Umumiy chegirma</span><div><button type="button" className={generalDiscount.type === "PERCENT" ? "active" : ""} onClick={() => setGeneralDiscount((current) => ({ ...current, type: "PERCENT" }))}>%</button><button type="button" className={generalDiscount.type === "FIXED" ? "active" : ""} onClick={() => setGeneralDiscount((current) => ({ ...current, type: "FIXED" }))}>UZS</button></div><input inputMode="decimal" value={generalDiscount.value} onChange={(event) => setGeneralDiscount((current) => ({ ...current, value: event.target.value.replace(/[^0-9.]/g, "") }))} placeholder="0"/></div>
+                <div className="qp-pos-grand-total"><span>Jami</span><strong>{formatMoney(total)}</strong></div>
+                <div className="qp-pos-payment-label">To‘lov usuli</div>
+                <div className="qp-payment-methods qp-payment-methods-focus qp-payment-methods-pro">{(db.paymentMethods || []).filter((item) => item.status === "ACTIVE").map((method) => <button type="button" key={method.id} title={method.shortcut || undefined} className={`qp-payment-method ${paymentMethod === method.code ? "active" : ""}`} onClick={() => setPaymentMethod(method.code)}>{paymentIcon(method)}<span>{method.name}</span></button>)}</div>
+                {selectedPaymentType === "CASH" ? <div className="qp-pos-cash-section qp-pos-cash-pro"><div className="qp-pos-cash-grid"><label className="qp-field"><span>Qabul qilindi</span><div className="qp-money-input"><input className="qp-input" inputMode="numeric" value={cashReceived} onChange={(event) => setCashReceived(event.target.value.replace(/[^0-9.]/g, ""))} placeholder={String(total || 0)}/><b>UZS</b></div></label><div className="qp-pos-change"><span>Qaytim</span><strong>{formatMoney(change)}</strong></div></div>{quickCashValues.length ? <div className="qp-pos-quick-cash">{quickCashValues.map((value) => <button key={value} type="button" onClick={() => setCashReceived(String(value))}>{value === total ? "Aniq summa" : formatMoney(value)}</button>)}</div> : null}</div> : null}
+                {selectedPaymentType === "CREDIT" ? <label className="qp-field"><span>To‘lov muddati</span><input className="qp-input" type="date" value={dueAt} onChange={(event) => setDueAt(event.target.value)}/></label> : null}
+                <div className="qp-pos-payment-summary"><span><small>Oraliq jami</small><b>{formatMoney(subtotal)}</b></span>{itemDiscount + generalDiscountAmount > 0 ? <span><small>Chegirma</small><b>-{formatMoney(itemDiscount + generalDiscountAmount)}</b></span> : null}</div>
+                <div className="qp-pos-cart-actions qp-pos-cart-actions-pro">{db.settings.pos.allowHeldCarts !== false ? <SecondaryButton disabled={!cart.length || checkoutBusy} onClick={holdCart}><Archive size={15}/> Kutishga qo‘yish</SecondaryButton> : null}<PrimaryButton disabled={checkoutBusy || !cart.length || (!customerId && db.settings.pos.allowAnonymousCustomer === false)} onClick={checkout}>{checkoutBusy ? <><LoaderCircle className="qp-spin" size={15}/> Yakunlanmoqda...</> : <><Check size={17}/> Savdoni yakunlash <kbd>F8</kbd></>}</PrimaryButton></div>
+              </div>
+            </aside>
+          </div>
+        </div>
       </div>
 
+      <Modal open={shiftOpen} title={shiftMode === "OPEN" ? "Smenani ochish" : shiftMode === "CLOSE" ? "Smenani yopish" : "Kassa harakati"} description={currentShift ? `Joriy smena: ${formatMoney(currentShift.expectedCash || 0)}` : "Naqd savdo uchun smena ochiq bo‘lishi kerak."} onClose={() => !shiftBusy && setShiftOpen(false)}>
+        <form className="qp-form-stack qp-pos-shift-form" onSubmit={submitShiftAction}>
+          {shiftMode === "OPEN" ? <>
+            <Field label="Kassa"><Select value={shiftForm.cashboxId} onChange={(event) => setShiftForm((current) => ({ ...current, cashboxId: event.target.value }))}><option value="">Kassani tanlang</option>{activeCashboxes.map((cashbox) => <option key={cashbox.id} value={cashbox.id}>{cashbox.name} · {cashbox.code}</option>)}</Select></Field>
+            {!activeCashboxes.length ? <div className="qp-inline-alert warning">Bu filial/ombor uchun faol kassa topilmadi. Boshqaruv → Kassa sozlamalaridan kassa yarating.</div> : null}
+            <Field label="Boshlang‘ich naqd"><input className="qp-input" type="number" min="0" step="0.01" value={shiftForm.openingBalance} onChange={(event) => setShiftForm((current) => ({ ...current, openingBalance: event.target.value }))}/></Field>
+          </> : null}
+          {shiftMode === "CASH" ? <>
+            <div className="qp-pos-shift-summary"><span>Kutilayotgan naqd</span><strong>{formatMoney(currentShift?.expectedCash || 0)}</strong></div>
+            <Field label="Harakat turi"><Select value={shiftForm.cashType} onChange={(event) => setShiftForm((current) => ({ ...current, cashType: event.target.value }))}><option value="CASH_IN">Kassaga kirim</option><option value="CASH_OUT">Kassadan chiqim</option><option value="INCOME">Boshqa daromad</option><option value="EXPENSE">Boshqa xarajat</option></Select></Field>
+            <Field label="Summa"><input className="qp-input" type="number" min="0.01" step="0.01" value={shiftForm.amount} onChange={(event) => setShiftForm((current) => ({ ...current, amount: event.target.value }))}/></Field>
+            <Field label="Izoh"><input className="qp-input" value={shiftForm.description} onChange={(event) => setShiftForm((current) => ({ ...current, description: event.target.value }))} placeholder="Masalan: mayda pul qo‘shildi"/></Field>
+          </> : null}
+          {shiftMode === "CLOSE" ? <><div className="qp-pos-shift-summary"><span>Tizim bo‘yicha</span><strong>{formatMoney(currentShift?.expectedCash || 0)}</strong></div><Field label="Sanab chiqilgan naqd"><input className="qp-input" type="number" min="0" step="0.01" value={shiftForm.closingBalance} onChange={(event) => setShiftForm((current) => ({ ...current, closingBalance: event.target.value }))}/></Field></> : null}
+          {shiftMode !== "CASH" ? <Field label="Izoh (ixtiyoriy)"><textarea className="qp-input" rows="3" value={shiftForm.note} onChange={(event) => setShiftForm((current) => ({ ...current, note: event.target.value }))}/></Field> : null}
+          <div className="qp-form-actions">
+            {currentShift && shiftMode === "CASH" ? <SecondaryButton type="button" onClick={() => openShiftManager("CLOSE")}>Smenani yopish</SecondaryButton> : <SecondaryButton type="button" onClick={() => setShiftOpen(false)}>Bekor qilish</SecondaryButton>}
+            <PrimaryButton type="submit" disabled={shiftBusy || (shiftMode === "OPEN" && !activeCashboxes.length)}>{shiftBusy ? <><LoaderCircle className="qp-spin" size={15}/> Saqlanmoqda...</> : shiftMode === "OPEN" ? "Smenani ochish" : shiftMode === "CLOSE" ? "Smenani yopish" : "Harakatni saqlash"}</PrimaryButton>
+          </div>
+        </form>
+      </Modal>
+      <Modal open={branchOpen} title="Filialni tanlang" description="Kassa qoldiq va ombor kontekstini tanlangan filialga moslaydi." onClose={() => setBranchOpen(false)}>
+        <div className="qp-pos-branch-picker">
+          {activeBranches.length ? activeBranches.map((branch) => {
+            const warehouseCount = (db.warehouses || []).filter((warehouse) => warehouse.status === "ACTIVE" && (!warehouse.branchId || warehouse.branchId === branch.id)).length;
+            return <button type="button" key={branch.id} className={selectedBranch?.id === branch.id ? "active" : ""} onClick={() => changeBranch(branch.id)}>
+              <Store size={18}/><span><strong>{branch.name}</strong><small>{warehouseCount} ta faol ombor</small></span>{selectedBranch?.id === branch.id ? <Check size={16}/> : null}
+            </button>;
+          }) : <div className="qp-role-empty">Faol filial topilmadi.</div>}
+        </div>
+      </Modal>
       <CameraScannerModal open={scannerOpen} onClose={() => setScannerOpen(false)} onDetected={addScannedValue} title="Kassada skanerlash" />
+      <Modal open={Boolean(selector)} title={selector?.name || "Variantni tanlang"} description="Faqat zarur variant, qadoq va serialni tanlang." onClose={() => setSelector(null)}>
+        {selector ? <div className="qp-pos-selector">{selector.variants?.length ? <Field label="Variant"><div className="qp-selector-options">{selector.variants.filter((item)=>item.status==='ACTIVE').map((item)=><button type="button" key={item.id} className={selectedVariantId===item.id?'active':''} onClick={()=>setSelectedVariantId(item.id)}>{item.name}<small>{Object.values(item.attributes || {}).join(' · ')}</small></button>)}</div></Field> : null}
+          {selector.packages?.length ? <Field label="Sotuv birligi"><div className="qp-selector-options"><button type="button" className={!selectedPackageId?'active':''} onClick={()=>setSelectedPackageId('')}>Dona / base</button>{selector.packages.filter((item)=>item.status==='ACTIVE' && (!item.variantId || item.variantId===selectedVariantId)).map((item)=><button type="button" key={item.id} className={selectedPackageId===item.id?'active':''} onClick={()=>setSelectedPackageId(item.id)}><Package size={14}/>{item.name}<small>1 = {Number(item.conversionToBase)} base</small></button>)}</div></Field> : null}
+          {selector.trackSerial ? <Field label="Serial / IMEI"><div className="qp-selector-serials">{(selector.serials || []).filter((item)=>item.status==='AVAILABLE' && (item.variantId || '') === (selectedVariantId || '') && !cart.some((line)=>(line.serialIds || []).includes(item.id))).map((item)=><label key={item.id}><input type="checkbox" checked={selectedSerialIds.includes(item.id)} onChange={()=>setSelectedSerialIds((current)=>current.includes(item.id)?current.filter((id)=>id!==item.id):[...current,item.id])}/><span>{item.imei || item.serial}</span></label>)}</div></Field> : null}
+          <div className="qp-form-actions"><SecondaryButton onClick={()=>setSelector(null)}>Bekor qilish</SecondaryButton><PrimaryButton disabled={Boolean(selector.variants?.length && !selectedVariantId) || Boolean(selector.trackSerial && selectedSerialIds.length !== Number(selector.packages?.find((item)=>item.id===selectedPackageId)?.conversionToBase || 1))} onClick={()=>commitProduct(selector, selector.variants?.find((item)=>item.id===selectedVariantId), selector.packages?.find((item)=>item.id===selectedPackageId), selectedSerialIds)}><Check size={15}/> Savatga qo‘shish</PrimaryButton></div></div> : null}
+      </Modal>
+      <Modal open={customerOpen} title="Yangi mijoz" description="Mijoz darhol canonical bazaga yoziladi." onClose={()=>setCustomerOpen(false)}><form className="qp-form-stack" onSubmit={createCustomer}><Field label="Mijoz nomi"><input className="qp-input" value={customerForm.name} onChange={(event)=>setCustomerForm((current)=>({...current,name:event.target.value}))} required/></Field><Field label="Telefon"><input className="qp-input" value={customerForm.phone} onChange={(event)=>setCustomerForm((current)=>({...current,phone:event.target.value}))}/></Field><Field label="Kredit limiti"><input className="qp-input" type="number" min="0" value={customerForm.creditLimit} onChange={(event)=>setCustomerForm((current)=>({...current,creditLimit:event.target.value}))}/></Field><div className="qp-form-actions"><SecondaryButton type="button" onClick={()=>setCustomerOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit">Mijozni saqlash</PrimaryButton></div></form></Modal>
+      <Modal open={Boolean(receiptPreview)} title="Savdo muvaffaqiyatli yakunlandi" description={receiptPreview?.sale?.number || "Chek tayyor"} onClose={()=>setReceiptPreview(null)}><div className="qp-receipt-preview"><Check size={30}/><strong>{formatMoney(receiptPreview?.sale?.total ?? receiptPreview?.cart?.reduce((sum,item)=>sum+item.price*item.quantity,0) ?? 0)}</strong><span>{receiptPreview?.customerName}</span><div className="qp-form-actions"><SecondaryButton onClick={()=>setReceiptPreview(null)}>Keyingi savdo</SecondaryButton><PrimaryButton onClick={()=>printPosReceipt(receiptPreview)}>Chekni chop etish</PrimaryButton></div></div></Modal>
       <Modal
         open={categoryOpen}
         title="Yangi kategoriya"
@@ -489,7 +717,6 @@ function PosPage() {
           </div>
         </form>
       </Modal>
-      </div>
     </>
   );
 }

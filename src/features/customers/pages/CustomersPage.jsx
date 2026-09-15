@@ -2,6 +2,8 @@ import { MapPin, MessageCircle, Phone, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { PERMISSIONS } from "../../../constants/permissions";
+import { usePermissions } from "../../../hooks/usePermissions";
 import LocationPicker from "../../../components/maps/LocationPicker";
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import { Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
@@ -13,10 +15,11 @@ import { useLocalDb } from "../../../services/localDb";
 import { notify } from "../../../services/notify";
 import { formatMoney, getName } from "../../../utils/formatters";
 
-const emptyForm = { name: "", image: "", customerType: "ORGANIZATION", taxId: "", category: "", phone: "", address: "", latitude: null, longitude: null, territory: "", priceListId: "pl-retail", agentId: "", creditLimit: "" };
+const emptyForm = { name: "", image: "", customerType: "ORGANIZATION", taxId: "", category: "", phone: "", address: "", latitude: null, longitude: null, territory: "", priceListId: "", agentId: "", creditLimit: "" };
 
 function CustomersPage() {
   const db = useLocalDb();
+  const { can } = usePermissions();
   const operationalAgents = getOperationalAgents(db);
   const [searchParams, setSearchParams] = useSearchParams();
   const [open, setOpen] = useState(false);
@@ -24,12 +27,13 @@ function CustomersPage() {
 
   useEffect(() => {
     if (searchParams.get("create") === "1") {
+      setForm((current) => ({ ...current, priceListId: current.priceListId || db.priceLists.find((item) => item.isDefault)?.id || db.priceLists[0]?.id || "" }));
       setOpen(true);
       const next = new URLSearchParams(searchParams);
       next.delete("create");
       setSearchParams(next, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [db.priceLists, searchParams, setSearchParams]);
 
   const rows = db.customers.map((item) => ({ ...item, agent: getName(db.agents, item.agentId, "Biriktirilmagan"), priceList: getName(db.priceLists, item.priceListId) }));
   const submit = async (event) => {
@@ -50,7 +54,7 @@ function CustomersPage() {
       eyebrow="Hamkorlar"
       rows={rows}
       searchFields={["name", "phone", "address", "territory", "agent", "taxId", "category"]}
-      actions={<PrimaryButton onClick={() => { setForm(emptyForm); setOpen(true); }}><Plus size={15} /> Yangi mijoz</PrimaryButton>}
+      actions={can(PERMISSIONS.CUSTOMERS_CREATE) ? <PrimaryButton onClick={() => { setForm({ ...emptyForm, priceListId: db.priceLists.find((item) => item.isDefault)?.id || db.priceLists[0]?.id || "" }); setOpen(true); }}><Plus size={15} /> Yangi mijoz</PrimaryButton> : null}
       detailTitle={(row) => row.name}
       detailDescription={(row) => row.address || row.phone || "Mijoz tafsilotlari"}
       detailRenderer={(row) => <div className="qp-stack">
@@ -82,7 +86,7 @@ function CustomersPage() {
     <Modal open={open} title="Yangi mijoz" onClose={() => setOpen(false)} wide>
       <form onSubmit={submit}>
         <div className="qp-form-grid">
-          <div className="qp-form-span-full"><ImageUploader value={form.image} name={form.name} label="Mijoz yoki savdo nuqtasi rasmi" compact onChange={(image)=>setForm((current)=>({...current,image}))}/></div>
+          <div className="qp-form-span-full"><ImageUploader purpose="other" value={form.image} name={form.name} label="Mijoz yoki savdo nuqtasi rasmi" compact onChange={(image)=>setForm((current)=>({...current,image}))}/></div>
           <Field label="Nomi"><input className="qp-input" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Field>
           <Field label="Mijoz turi"><Select value={form.customerType} onChange={(event)=>setForm({...form,customerType:event.target.value})}><option value="ORGANIZATION">Tashkilot</option><option value="PERSON">Jismoniy shaxs</option></Select></Field>
           <Field label="Telefon"><input className="qp-input" inputMode="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></Field>

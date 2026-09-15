@@ -86,7 +86,8 @@ export async function apiRequest({ url, method = "POST", body, params }) {
   if (inFlightMutations.has(key)) return inFlightMutations.get(key);
   const button = actionButtonForCurrentInteraction();
   markActionBusy(button, true);
-  const promise = run(baseApi.endpoints.request, { url, method: verb, body, params }, "Amalni bajarib bo‘lmadi.")
+  const idempotencyKey = globalThis.crypto?.randomUUID?.() || `qulay-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const promise = run(baseApi.endpoints.request, { url, method: verb, body, params, idempotencyKey }, "Amalni bajarib bo‘lmadi.")
     .finally(() => { inFlightMutations.delete(key); markActionBusy(button, false); });
   inFlightMutations.set(key, promise);
   return promise;

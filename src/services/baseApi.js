@@ -64,12 +64,28 @@ const unwrap = (response) => response?.data;
 const ALL_TAGS = ["Dashboard", "Company", "Branch", "Access", "Employee", "Product", "Inventory", "Customer", "Supplier", "Order", "Agent", "Delivery", "Invoice", "Payment", "Debt", "Return", "Notification", "Settings", "Report"];
 
 async function optionalQuery(baseQuery, url) {
-  const result = await baseQuery({ url, params: { limit: 100 } });
-  if (result.error) {
-    if ([403, 404].includes(Number(result.error.status))) return null;
-    throw result.error;
+  const first = await baseQuery({ url, params: { page: 1, limit: 100 } });
+  if (first.error) {
+    if ([403, 404].includes(Number(first.error.status))) return null;
+    throw first.error;
   }
-  return result.data?.data ?? null;
+  const firstData = first.data?.data ?? null;
+  const meta = first.data?.meta;
+  if (!Array.isArray(firstData) || !meta?.hasNextPage || Number(meta.totalPages || 0) <= 1) return firstData;
+
+  // localDb is currently the shared read model used by POS, global search and linked modules.
+  // Paginated APIs must therefore be fully hydrated instead of silently truncating at 100 rows.
+  const pages = Array.from({ length: Number(meta.totalPages) - 1 }, (_, index) => index + 2);
+  const all = [...firstData];
+  const concurrency = 4;
+  for (let offset = 0; offset < pages.length; offset += concurrency) {
+    const batch = await Promise.all(pages.slice(offset, offset + concurrency).map((page) => baseQuery({ url, params: { page, limit: 100 } })));
+    for (const result of batch) {
+      if (result.error) throw result.error;
+      if (Array.isArray(result.data?.data)) all.push(...result.data.data);
+    }
+  }
+  return all;
 }
 
 const bootstrapRoutes = {
@@ -127,7 +143,8 @@ export const baseApi = createApi({
       providesTags: ALL_TAGS,
     }),
     request: builder.mutation({
-      query: ({ url, method = "POST", body, params }) => ({ url, method, body, params }),
+      query: ({ url, method = "POST", body, params, idempotencyKey }) => ({ url, method, body, params,
+        ...(idempotencyKey ? { headers: { "idempotency-key": idempotencyKey } } : {}) }),
       transformResponse: unwrap,
       async onQueryStarted(arg, { dispatch, queryFulfilled }) {
         try {

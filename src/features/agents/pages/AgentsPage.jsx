@@ -1,15 +1,15 @@
-import { Activity, Navigation, Phone, Plus, Route, ShoppingBag, WalletCards } from "lucide-react";
+import { Activity, LoaderCircle, Navigation, Phone, Plus, Route, ShoppingBag, WalletCards } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import NavigationAppModal from "../../../components/maps/NavigationAppModal";
-import LocationPicker from "../../../components/maps/LocationPicker";
 import YandexMap from "../../../components/maps/YandexMap";
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import Select from "../../../components/ui/Select";
 import { Field, Modal, PageShell, PrimaryButton, SecondaryButton, StatusPill, SummaryGrid } from "../../../components/prototype/PrototypeUI";
-import { useAuth } from "../../../hooks/useAuth";
 import { usePlatformFeatureFlag } from "../../../hooks/usePlatformSettings";
+import { usePermissions } from "../../../hooks/usePermissions";
 import { createEmployeeIdentity } from "../../../services/employeeService";
+import { apiRequest } from "../../../services/authService";
 import { getOperationalAgents } from "../../../services/employeeSelectors";
 import { useLocalDb } from "../../../services/localDb";
 import { notify } from "../../../services/notify";
@@ -17,13 +17,26 @@ import { formatMoney } from "../../../utils/formatters";
 
 function AgentsPage() {
   const db = useLocalDb();
-  const { company } = useAuth();
+  const { isOwner, isAdmin } = usePermissions();
+  const canCreateAgent = isOwner || isAdmin;
   const workforceMapEnabled = usePlatformFeatureFlag("workforceMap", true);
   const [open, setOpen] = useState(false);
   const operationalAgents = useMemo(() => getOperationalAgents(db), [db]);
   const [selectedId, setSelectedId] = useState(() => operationalAgents[0]?.id || null);
   const [navigationTarget, setNavigationTarget] = useState(null);
-  const [form, setForm] = useState({ name: "", title: "Savdo agenti", phone: "", territory: "", branch: "Bosh filial", warehouseId: db.settings.company.defaultWarehouseId || "", baseSalary: 0, kpiBonus: 0, salesBonusPercent: 0, address: "", latitude: null, longitude: null });
+  const [busy, setBusy] = useState(false);
+  const activeBranches = (db.branches || []).filter((branch) => branch.status !== "INACTIVE");
+  const emptyAgentForm = () => {
+    const branchId = activeBranches[0]?.id || "";
+    const preferredWarehouse = (db.warehouses || []).find((warehouse) => warehouse.id === db.settings.company.defaultWarehouseId && warehouse.status !== "INACTIVE" && (!branchId || !warehouse.branchId || warehouse.branchId === branchId))
+      || (db.warehouses || []).find((warehouse) => warehouse.status !== "INACTIVE" && (!branchId || !warehouse.branchId || warehouse.branchId === branchId));
+    return {
+      name: "", title: "Savdo agenti", phone: "", login: "", password: "", pin: "",
+      branchId, warehouseId: preferredWarehouse?.id || "", baseSalary: 0, kpiBonus: 0, salesBonusPercent: 0,
+    };
+  };
+  const [form, setForm] = useState(() => emptyAgentForm());
+  const warehousesForForm = useMemo(() => (db.warehouses || []).filter((warehouse) => warehouse.status !== "INACTIVE" && (!form.branchId || !warehouse.branchId || warehouse.branchId === form.branchId)), [db.warehouses, form.branchId]);
 
   const agents = useMemo(() => operationalAgents.map((agent) => ({
     ...agent,
@@ -52,23 +65,36 @@ function AgentsPage() {
     shortLabel: agent.name.split(" ")[0],
   }));
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
-    if (!form.name.trim() || !form.phone.trim()) { notify("Agent ismi va telefonini kiriting", "warning"); return; }
+    if (busy) return;
+    if (!form.name.trim() || (!form.phone.trim() && !form.login.trim())) { notify("Agent ismi va login yoki telefonini kiriting", "warning"); return; }
+    if (!/^\d{4,8}$/.test(form.pin)) { notify("PIN 4–8 ta raqamdan iborat bo‘lsin", "warning"); return; }
+    setBusy(true);
     try {
-      const employee = createEmployeeIdentity({ companyId: company?.id, ...form, roles: ["SALES_AGENT"], plannedVisitsToday: 10 });
-      const created = db.agents.find((item) => item.employeeId === employee.id);
-      setForm({ name: "", title: "Savdo agenti", phone: "", territory: "", branch: "Bosh filial", warehouseId: db.settings.company.defaultWarehouseId || "", baseSalary: 0, kpiBonus: 0, salesBonusPercent: 0, address: "", latitude: null, longitude: null });
+      const employee = await createEmployeeIdentity({
+        ...form, role: "SALES_AGENT", moduleAccess: ["agent_workspace", "agents", "routes", "partners", "sales", "finance"],
+      });
+      const month = new Date().toISOString().slice(0, 7);
+      if (Number(form.baseSalary || 0) || Number(form.kpiBonus || 0)) {
+        try {
+          await apiRequest({ url: "/workforce/kpis", method: "PUT", body: { employeeId: employee.id, month, baseSalary: Number(form.baseSalary || 0),
+            target: 100, actual: 0, kpiBonus: Number(form.kpiBonus || 0), salesBonus: 0, penalties: 0 } });
+        } catch (salaryError) {
+          notify(`Agent yaratildi, lekin KPI/oylik sozlamasi saqlanmadi: ${salaryError.message}`, "warning");
+        }
+      }
+      setForm(emptyAgentForm());
       setOpen(false);
-      setSelectedId(created?.id || null);
-      notify("Savdo agenti qo‘shildi");
+      setSelectedId(employee.id);
+      notify("Savdo agenti va uning kirish ma’lumotlari yaratildi");
     } catch (error) {
       notify(error.message, "warning");
-    }
+    } finally { setBusy(false); }
   };
 
   return <>
-    <PageShell title="Agentlar" description="Savdo agentlarining joylashuvi, bugungi marshruti, tashriflari, buyurtmalari va to‘lovlarini bitta boshqaruv markazida kuzating." eyebrow="Agentlar" actions={<PrimaryButton onClick={() => setOpen(true)}><Plus size={15} /> Agent qo‘shish</PrimaryButton>}>
+    <PageShell title="Agentlar" description="Savdo agentlarining joylashuvi, bugungi marshruti, tashriflari, buyurtmalari va to‘lovlarini bitta boshqaruv markazida kuzating." eyebrow="Agentlar" actions={canCreateAgent ? <PrimaryButton onClick={() => { setForm(emptyAgentForm()); setOpen(true); }}><Plus size={15} /> Agent qo‘shish</PrimaryButton> : null}>
       <SummaryGrid>
         <div><span>Faol agentlar</span><strong>{activeAgents}</strong><small>{workingAgents} tasi bugun faol</small></div>
         <div><span>Bugungi tashriflar</span><strong>{visits}</strong><small>{agents.reduce((sum, agent) => sum + agent.plannedVisitsToday, 0)} ta rejalashtirilgan</small></div>
@@ -124,7 +150,7 @@ function AgentsPage() {
       ]}
     />
 
-    <Modal open={open} title="Yangi savdo agenti" description="Agent biznes jarayonlarida mas’ul xodim sifatida qo‘shiladi. Login va parol kerak emas." onClose={() => setOpen(false)} wide><form onSubmit={submit}><div className="qp-form-grid"><Field label="Ism va familiya"><input className="qp-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field><Field label="Lavozim"><input className="qp-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field><Field label="Telefon"><input className="qp-input" inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+998 90 123 45 67" /></Field><Field label="Filial"><input className="qp-input" value={form.branch} onChange={(e) => setForm({ ...form, branch: e.target.value })} /></Field><Field label="Ombor"><Select value={form.warehouseId} onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}><option value="">Biriktirilmagan</option>{db.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select></Field><Field label="Hudud"><input className="qp-input" value={form.territory} onChange={(e) => setForm({ ...form, territory: e.target.value })} /></Field><Field label="Bazaviy oylik"><input className="qp-input" type="number" min="0" value={form.baseSalary} onChange={(e) => setForm({ ...form, baseSalary: e.target.value })} /></Field><Field label="KPI bonusi"><input className="qp-input" type="number" min="0" value={form.kpiBonus} onChange={(e) => setForm({ ...form, kpiBonus: e.target.value })} /></Field><Field label="Savdo bonusi (%)"><input className="qp-input" type="number" min="0" max="100" value={form.salesBonusPercent} onChange={(e) => setForm({ ...form, salesBonusPercent: e.target.value })} /></Field><div className="qp-form-grid-span"><LocationPicker value={form} onChange={(location) => setForm({ ...form, ...location })} /></div></div><div className="qp-form-actions"><SecondaryButton type="button" onClick={() => setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit">Agent qo‘shish</PrimaryButton></div></form></Modal>
+    <Modal open={open} title="Yangi savdo agenti" description="Agent QULAY xodimi sifatida yaratiladi va Agent ish joyiga login/parol yoki PIN bilan kira oladi." onClose={() => { if (!busy) setOpen(false); }} wide><form onSubmit={submit} aria-busy={busy}><div className="qp-form-grid"><Field label="Ism va familiya"><input required className="qp-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field><Field label="Lavozim"><input required className="qp-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field><Field label="Telefon"><input className="qp-input" inputMode="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+998 90 123 45 67" /></Field><Field label="Login"><input className="qp-input" autoComplete="off" value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value.replace(/\s/g, "") })} placeholder="agent.ali" /></Field><Field label="Parol" hint="Kamida 8 belgi, katta-kichik harf va raqam"><input required className="qp-input" type="password" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></Field><Field label="PIN" hint="4–8 ta raqam"><input required className="qp-input" type="password" inputMode="numeric" maxLength={8} autoComplete="new-password" value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, "").slice(0, 8) })} /></Field><Field label="Filial"><Select value={form.branchId} onChange={(e) => { const branchId = e.target.value; setForm((current) => ({ ...current, branchId, warehouseId: warehousesForForm.some((warehouse) => warehouse.id === current.warehouseId && (!branchId || !warehouse.branchId || warehouse.branchId === branchId)) ? current.warehouseId : "" })); }}><option value="">Biriktirilmagan</option>{activeBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</Select></Field><Field label="Ombor"><Select value={form.warehouseId} onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}><option value="">Biriktirilmagan</option>{warehousesForForm.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select></Field><Field label="Bazaviy oylik"><input className="qp-input" type="number" min="0" value={form.baseSalary} onChange={(e) => setForm({ ...form, baseSalary: e.target.value })} /></Field><Field label="KPI bonusi"><input className="qp-input" type="number" min="0" value={form.kpiBonus} onChange={(e) => setForm({ ...form, kpiBonus: e.target.value })} /></Field></div><div className="qp-inline-warning">Hudud va marshrut agent yaratilgandan keyin Agentlar → Hududlar / Marshrutlar orqali biriktiriladi. Bu ma’lumotlar login profilidan alohida boshqariladi.</div><div className="qp-form-actions"><SecondaryButton type="button" disabled={busy} onClick={() => setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit" disabled={busy}>{busy ? <><LoaderCircle className="qp-spin" size={15}/> Yaratilmoqda...</> : <><Plus size={15}/> Agent qo‘shish</>}</PrimaryButton></div></form></Modal>
     <NavigationAppModal open={Boolean(navigationTarget)} destination={navigationTarget} onClose={() => setNavigationTarget(null)} />
   </>;
 }

@@ -4,6 +4,7 @@ import { apiRequest, AUTH_EVENT, DEFAULT_COMPANY_ID, getActiveCompanyId } from "
 import { useBootstrapQuery } from "./baseApi";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 import { relationDisplayFields } from "../utils/displayValue";
+import { resolveMediaUrl } from "../utils/mediaUrl";
 
 const STORAGE_KEY_PREFIX = "qulay.ui.preferences.v1";
 const EVENT_NAME = "qulay:local-db-change";
@@ -143,7 +144,7 @@ export function normalizeRemoteData(remote = {}) {
       ...relationDisplayFields(item, RELATION_KEYS),
       barcode: item.barcodes?.find((code) => code.isPrimary)?.barcode || item.barcodes?.[0]?.barcode || "",
       barcodes: item.barcodes?.map((code) => code.barcode) || [],
-      image: item.imageUrl || "",
+      image: resolveMediaUrl(item.imageUrl || item.images?.find((image) => image.isPrimary)?.url || item.images?.[0]?.url || ""),
       price: Number(primaryPrice?.price || 0),
       prices: currentPrices,
       stocks: (item.stocks || []).map((stock) => ({ ...stock, onHand: Number(stock.onHand || 0), reserved: Number(stock.reserved || 0) })),

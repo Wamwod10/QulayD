@@ -7,8 +7,9 @@ async function perform(request, successMessage) {
 
 export async function createProduct(payload) {
   const barcodes = (payload.barcodes?.length ? payload.barcodes : [payload.barcode]).filter(Boolean).map((barcode, index) => ({ barcode: String(barcode), isPrimary: index === 0 }));
-  const prices = [payload.priceListId && payload.price ? { priceListId: payload.priceListId, price: Number(payload.price) } : null,
-    payload.wholesalePriceListId && payload.wholesalePrice ? { priceListId: payload.wholesalePriceListId, price: Number(payload.wholesalePrice) } : null].filter(Boolean);
+  const prices = Array.isArray(payload.prices)
+    ? payload.prices.filter((item) => item?.priceListId && Number(item.price) >= 0).map((item) => ({ priceListId: item.priceListId, price: Number(item.price) }))
+    : payload.priceListId && payload.price != null ? [{ priceListId: payload.priceListId, price: Number(payload.price) }] : [];
   const openingStock = payload.warehouseId && Number(payload.initialStock) > 0 ? [{ warehouseId: payload.warehouseId, onHand: Number(payload.initialStock) }] : undefined;
   return perform({ url: "/catalog/products", body: { name: payload.name, sku: payload.sku || undefined, categoryId: payload.categoryId || null,
     unitId: payload.unitId, imageUrl: payload.image || undefined, costPrice: Number(payload.costPrice || 0), minStock: Number(payload.minStock || 0),

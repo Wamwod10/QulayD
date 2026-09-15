@@ -139,14 +139,12 @@ export function normalizeRemoteData(remote = {}) {
   mapped.products = (remote.products || []).map((item) => {
     const currentPrices = [...(item.prices || [])].sort((a, b) => Number(Boolean(b.priceList?.isDefault)) - Number(Boolean(a.priceList?.isDefault)));
     const primaryPrice = currentPrices.find((entry) => entry.priceList?.isDefault) || currentPrices[0];
-    const secondaryPrice = currentPrices.find((entry) => entry.id !== primaryPrice?.id);
     return {
       ...relationDisplayFields(item, RELATION_KEYS),
       barcode: item.barcodes?.find((code) => code.isPrimary)?.barcode || item.barcodes?.[0]?.barcode || "",
       barcodes: item.barcodes?.map((code) => code.barcode) || [],
       image: item.imageUrl || "",
       price: Number(primaryPrice?.price || 0),
-      wholesalePrice: Number(secondaryPrice?.price ?? primaryPrice?.price ?? 0),
       prices: currentPrices,
       stocks: (item.stocks || []).map((stock) => ({ ...stock, onHand: Number(stock.onHand || 0), reserved: Number(stock.reserved || 0) })),
     };

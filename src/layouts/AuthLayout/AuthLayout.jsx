@@ -34,6 +34,7 @@ function AuthLayout() {
         </div>
       </aside>
       <main className="qp-auth-main">
+        <div className="qp-auth-mobile-brand" aria-hidden="true"><span>Q</span><div><strong>Qulay</strong><small>Business Control</small></div></div>
         <div className="qp-auth-language-switcher" aria-label="Interfeys tili">
           {languageOptions.map((code) => (
             <button key={code} type="button" className={language === code ? "active" : ""} onClick={() => changeLanguage(code)}>

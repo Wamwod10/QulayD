@@ -1,4 +1,4 @@
-import { Activity, Archive, Edit3, Eye, KeyRound, LoaderCircle, MapPin, Plus, Power, PowerOff, Trash2, UsersRound } from "lucide-react";
+import { Archive, Edit3, Eye, KeyRound, LoaderCircle, Plus, Power, PowerOff, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -10,7 +10,7 @@ import { useAuth } from "../../../hooks/useAuth";
 import { usePermissions } from "../../../hooks/usePermissions";
 import { createEmployeeIdentity, removeEmployeeRecord, updateEmployeeIdentity, updateEmployeeRecord } from "../../../services/employeeService";
 import { resetAuthUserPassword } from "../../../services/authService";
-import { useLocalDb } from "../../../services/localDb";
+import { updateLocalDb, useLocalDb } from "../../../services/localDb";
 import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 import { formatMoney } from "../../../utils/formatters";
@@ -66,7 +66,6 @@ function UsersPage() {
   const active = rows.filter((item) => item.status === "ACTIVE").length;
   const warehousesForForm = useMemo(() => (db.warehouses || []).filter((warehouse) => warehouse.status !== "INACTIVE" && (!form.branchId || !warehouse.branchId || warehouse.branchId === form.branchId)), [db.warehouses, form.branchId]);
   const agents = rows.filter((item) => ["SALES_AGENT", "AGENT"].includes(String(item.role).toUpperCase()) || item.modules?.includes("agent_workspace")).length;
-  const fieldTeam = rows.filter((item) => item.modules?.some((module) => ["agent_workspace", "driver_workspace"].includes(module))).length;
 
   const openCreate = () => {
     const role = employeeTypes[0]?.code || "";
@@ -133,8 +132,8 @@ function UsersPage() {
   const resetEmployeePassword = async (event) => {
     event.preventDefault();
     if (!passwordEmployee || passwordBusy) return;
-    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword)) {
-      notify("Parol kamida 8 belgi, katta-kichik harf va raqamdan iborat bo‘lsin", "warning");
+    if (newPassword.length < 6) {
+      notify("Parol kamida 6 ta belgidan iborat bo‘lsin", "warning");
       return;
     }
     setPasswordBusy(true);
@@ -159,8 +158,16 @@ function UsersPage() {
     setTypeBusy(true);
     try {
       const savedCode = editingType?.code || makeEmployeeTypeCode();
-      await apiRequest({ url: editingType ? `/workforce/employee-types/${editingType.id}` : "/workforce/employee-types", method: editingType ? "PATCH" : "POST", body: { code: savedCode, name: cleanName, status: "ACTIVE" } });
-      if (!editingType) chooseEmployeeType(savedCode);
+      const savedType = await apiRequest({ url: editingType ? `/workforce/employee-types/${editingType.id}` : "/workforce/employee-types", method: editingType ? "PATCH" : "POST", body: { code: savedCode, name: cleanName, status: "ACTIVE" } });
+      updateLocalDb((state) => {
+        const normalized = { ...savedType, system: Boolean(savedType.isSystem) };
+        const currentTypes = state.employeeTypes || [];
+        const exists = currentTypes.some((item) => item.id === normalized.id || item.code === normalized.code);
+        return { ...state, employeeTypes: exists
+          ? currentTypes.map((item) => item.id === normalized.id || item.code === normalized.code ? { ...item, ...normalized } : item)
+          : [...currentTypes, normalized] };
+      });
+      if (!editingType) chooseEmployeeType(savedType.code || savedCode);
       setTypeModalOpen(false); setTypeName("");
       notify(editingType ? "Xodim turi yangilandi" : "Yangi xodim turi qo‘shildi");
     } catch (error) { notify(error.message, "danger"); }
@@ -172,6 +179,7 @@ function UsersPage() {
     setTypeBusy(true);
     try {
       await apiRequest({ url: `/workforce/employee-types/${type.id}`, method: "PATCH", body: { status: "INACTIVE" } });
+      updateLocalDb((state) => ({ ...state, employeeTypes: (state.employeeTypes || []).map((item) => item.id === type.id ? { ...item, status: "INACTIVE" } : item) }));
       if (form.role === type.code) {
         const fallback = employeeTypes.find((item) => item.id !== type.id)?.code || "";
         chooseEmployeeType(fallback);
@@ -182,11 +190,7 @@ function UsersPage() {
   };
 
   return <>
-    <section className="qp-owner-team-summary">
-      <div><span>Jamoa</span><h2>Xodimlar boshqaruvi</h2><p>Owner va Admin xodim hisobini, ish turini, maxsus ish joyini va qo‘shimcha modullarini boshqaradi.</p></div>
-      <div className="qp-owner-team-stats"><article><UsersRound size={17}/><span>Jami</span><strong>{rows.length}</strong></article><article><Activity size={17}/><span>Faol</span><strong>{active}</strong></article><article><MapPin size={17}/><span>Dala jamoasi</span><strong>{fieldTeam}</strong></article><article><UsersRound size={17}/><span>Agentlar</span><strong>{agents}</strong></article></div>
-    </section>
-    <SmartTablePage title="Xodimlar" description="Distribution jamoasi uchun maxsus ish modullari va qo‘shimcha ruxsatlarni bir joydan boshqaring." eyebrow="Jamoa" rows={rows} searchFields={["name", "phone", "title", "roleLabel", "branch"]} extraSummary={[{label:"Jami xodim",value:rows.length,hint:"Kompaniya jamoasi"},{label:"Faol",value:active,hint:"Operatsiyalarda tanlash mumkin"},{label:"Agent",value:agents,hint:"Savdo xodimlari"},{label:"Faolsiz",value:rows.length-active,hint:"Tarix saqlanadi"}]} actions={canManageTeam ? <PrimaryButton onClick={openCreate}><Plus size={15}/> Xodim qo‘shish</PrimaryButton> : null} columns={[
+    <SmartTablePage title="Xodimlar" description="Xodim hisoblari, ish turlari, ish joylari va qo‘shimcha ruxsatlarni bir joydan boshqaring." eyebrow="Jamoa" rows={rows} searchFields={["name", "phone", "title", "roleLabel", "branch"]} extraSummary={[{label:"Jami xodim",value:rows.length,hint:"Kompaniya jamoasi"},{label:"Faol",value:active,hint:"Operatsiyalarda tanlash mumkin"},{label:"Agent",value:agents,hint:"Savdo xodimlari"},{label:"Faolsiz",value:rows.length-active,hint:"Tarix saqlanadi"}]} actions={canManageTeam ? <PrimaryButton onClick={openCreate}><Plus size={15}/> Xodim qo‘shish</PrimaryButton> : null} columns={[
       { key:"name", label:"Xodim", render:(row)=><div className="qp-product-name-cell">{row.image ? <img src={row.image} alt="" /> : <span>{row.name.slice(0,1).toUpperCase()}</span>}<div><strong>{row.name}</strong><div className="qp-muted">{row.title}</div></div></div> },
       { key:"phone", label:"Telefon", render:(row)=>row.phone || "—" }, { key:"roleLabel", label:"Turi" }, { key:"branch", label:"Filial" },
       { key:"modules", label:"Ish joyi", render:(row)=>row.modules?.map((key)=>EMPLOYEE_WORKSPACE_OPTIONS.find(([id])=>id===key)?.[1]?.shortLabel).filter(Boolean).join(", ") || "Qo‘shimcha modul" },
@@ -203,8 +207,8 @@ function UsersPage() {
         <Field label="Filial"><Select value={form.branchId} onChange={(e)=>{ const branchId = e.target.value; setForm((current)=>({ ...current, branchId, warehouseId: warehousesForForm.some((warehouse)=>warehouse.id===current.warehouseId && (!branchId || !warehouse.branchId || warehouse.branchId===branchId)) ? current.warehouseId : "" })); }}><option value="">Biriktirilmagan</option>{branches.map((branch)=><option key={branch.id} value={branch.id}>{branch.name}</option>)}</Select></Field>
         <Field label="Ombor"><Select value={form.warehouseId} onChange={(e)=>setForm({...form,warehouseId:e.target.value})}><option value="">Biriktirilmagan</option>{warehousesForForm.map((warehouse)=><option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select></Field>
         <Field label="Login"><input className="qp-input" autoComplete="off" value={form.login} onChange={(e)=>setForm({...form,login:e.target.value.replace(/\s/g, "")})}/></Field>
-        {!editingEmployee ? <Field label="Parol"><input required className="qp-input" type="password" autoComplete="new-password" value={form.password} onChange={(e)=>setForm({...form,password:e.target.value})}/></Field> : null}
-        <Field label={editingEmployee ? "Yangi PIN (ixtiyoriy)" : "PIN"}><input className="qp-input" type="password" inputMode="numeric" maxLength={8} autoComplete="new-password" value={form.pin} onChange={(e)=>setForm({...form,pin:e.target.value.replace(/\D/g, "").slice(0, 8)})} placeholder={editingEmployee ? "O‘zgartirmaslik uchun bo‘sh qoldiring" : "4–8 ta raqam"}/></Field>
+        {!editingEmployee ? <Field label="Parol" hint="Kamida 6 ta belgi; katta harf yoki raqam majburiy emas"><input required className="qp-input" type="password" autoComplete="new-password" minLength={6} maxLength={128} value={form.password} onChange={(e)=>setForm({...form,password:e.target.value})}/></Field> : null}
+        <Field label={editingEmployee ? "Yangi PIN (ixtiyoriy)" : "PIN *"} hint="Aynan 6 ta raqam"><input className="qp-input" type="password" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="new-password" required={!editingEmployee} value={form.pin} onChange={(e)=>setForm({...form,pin:e.target.value.replace(/\D/g, "").slice(0, 6)})} placeholder={editingEmployee ? "O‘zgartirmaslik uchun bo‘sh qoldiring" : "6 xonali PIN"}/></Field>
 
         <div className="qp-form-span-full qp-employee-module-group"><div><span className="qp-field-label">Xodim ish modullari</span><small>Distributiondagi frontline xodimlar uchun soddalashtirilgan alohida ish joylari.</small></div><div className="qp-module-selector qp-workspace-selector">{EMPLOYEE_WORKSPACE_OPTIONS.map(([key,workspace])=><label key={key}><input type="checkbox" checked={form.moduleAccess.includes(key)} onChange={(event)=>toggleModule(key,event.target.checked)}/><span><strong>{workspace.label}</strong><small>{workspace.description}</small></span></label>)}</div></div>
         <div className="qp-form-span-full qp-employee-module-group"><div><span className="qp-field-label">Qo‘shimcha biznes modullari</span><small>Kerak bo‘lsa xodimga boshqaruv modullarini ham qo‘shing. Agent ish joyi “Agentlar” admin modulidan alohida.</small></div><div className="qp-module-selector">{businessModuleOptions.map(([key,label])=><label key={key}><input type="checkbox" checked={form.moduleAccess.includes(key)} onChange={(event)=>toggleModule(key,event.target.checked)}/><span>{label}</span></label>)}</div></div>
@@ -213,7 +217,7 @@ function UsersPage() {
 
     <Modal open={Boolean(passwordEmployee)} title="Xodim parolini yangilash" description={`${passwordEmployee?.name || "Xodim"} uchun yangi vaqtinchalik parol belgilang.`} onClose={()=>{ if (!passwordBusy) { setPasswordEmployee(null); setNewPassword(""); } }}>
       <form className="qp-form-stack" onSubmit={resetEmployeePassword}>
-        <Field label="Yangi parol" hint="Kamida 8 belgi, katta-kichik harf va raqam"><input className="qp-input" type="password" autoComplete="new-password" value={newPassword} onChange={(event)=>setNewPassword(event.target.value)} required autoFocus/></Field>
+        <Field label="Yangi parol" hint="Kamida 6 ta belgi; murakkablik talabi yo‘q"><input className="qp-input" type="password" autoComplete="new-password" minLength={6} maxLength={128} value={newPassword} onChange={(event)=>setNewPassword(event.target.value)} required autoFocus/></Field>
         <div className="qp-inline-alert warning">Parol reset qilinganda xodimning eski sessiyalari bekor qilinadi va keyingi kirishda parolni almashtirishi talab qilinadi.</div>
         <div className="qp-form-actions"><SecondaryButton type="button" disabled={passwordBusy} onClick={()=>{ setPasswordEmployee(null); setNewPassword(""); }}>Bekor qilish</SecondaryButton><PrimaryButton type="submit" disabled={passwordBusy}>{passwordBusy ? <><LoaderCircle className="qp-spin" size={15}/> Yangilanmoqda...</> : <><KeyRound size={15}/> Parolni yangilash</>}</PrimaryButton></div>
       </form>

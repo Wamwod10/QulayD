@@ -1,11 +1,14 @@
 import {
-  Boxes, CheckCircle2, CircleDollarSign, ClipboardList, MapPin, PackageCheck,
-  Route, ScanLine, ShoppingBag, Truck, UserRound, Users, Warehouse,
+  Bell, Boxes, CalendarDays, CheckCircle2, ChevronRight, CircleDollarSign, ClipboardList, MapPin, PackageCheck,
+  Route, ScanLine, ShoppingBag, Target, Truck, UserRound, Users, Warehouse,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { EMPLOYEE_WORKSPACES } from "../../../config/employeeWorkspaces";
+import { getRouteModule, getRoutePermission } from "../../../app/navigationConfig";
 import { useAuth } from "../../../hooks/useAuth";
+import { useModuleAccess } from "../../../hooks/useModuleAccess";
+import { usePermissions } from "../../../hooks/usePermissions";
 import { useLocalDb } from "../../../services/localDb";
 import { getDisplayValue } from "../../../utils/displayValue";
 import { formatMoney } from "../../../utils/formatters";
@@ -72,7 +75,8 @@ const configs = {
 function belongsToUser(row, user) {
   if (!row || !user) return false;
   const ids = [row.employeeId, row.agentId, row.driverId, row.pickerEmployeeId, row.createdByEmployeeId, row.cashierId, row.userId].filter(Boolean);
-  return ids.length ? ids.includes(user.id) : false;
+  const userIds = [user.id, user.employeeId].filter(Boolean);
+  return ids.length ? ids.some((id) => userIds.includes(id)) : false;
 }
 
 function countScoped(rows, user, manager) {
@@ -82,11 +86,19 @@ function countScoped(rows, user, manager) {
 
 function EmployeeWorkspacePage({ workspaceKey }) {
   const db = useLocalDb();
+  const navigate = useNavigate();
   const { user } = useAuth();
+  const { can } = usePermissions();
+  const { isEnabled } = useModuleAccess();
   const workspace = EMPLOYEE_WORKSPACES[workspaceKey];
   const config = configs[workspaceKey];
   const isManager = Boolean(user?.roles?.some((role) => ["OWNER", "ADMIN"].includes(role)));
   const Icon = config.icon;
+  const visibleActions = config.actions.filter(([, to]) => {
+    const moduleKey = getRouteModule(to);
+    const permission = getRoutePermission(to);
+    return (!moduleKey || isEnabled(moduleKey)) && (!permission || can(permission));
+  });
 
   const metrics = {
     agent_workspace: [
@@ -127,14 +139,28 @@ function EmployeeWorkspacePage({ workspaceKey }) {
     ],
   }[workspaceKey] || [];
 
-  const recentRows = ({
+  const sourceRows = ({
     agent_workspace: db.visits,
     warehouse_workspace: db.movements,
     fulfillment_workspace: db.pickLists,
     driver_workspace: db.deliveries,
     sales_operator_workspace: db.orders,
     cashier_workspace: db.payments,
-  }[workspaceKey] || []).filter((row) => isManager || belongsToUser(row, user)).slice(0, 6);
+  }[workspaceKey] || []).filter((row) => isManager || belongsToUser(row, user));
+  const recentRows = sourceRows.slice(0, 6);
+  const completedStatuses = new Set(["COMPLETED", "DONE", "DELIVERED", "PAID", "CLOSED", "FULFILLED", "VISITED"]);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const datedRows = sourceRows.filter((row) => {
+    const raw = row.scheduledAt || row.plannedAt || row.deliveryDate || row.date || row.createdAt;
+    if (!raw) return false;
+    const parsed = new Date(raw);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === todayKey;
+  });
+  const planRows = datedRows.length ? datedRows : sourceRows.slice(0, 12);
+  const completedPlan = planRows.filter((row) => completedStatuses.has(String(row.status || "").toUpperCase())).length;
+  const planPercent = planRows.length ? Math.round((completedPlan / planRows.length) * 100) : 0;
+  const unreadNotifications = (db.workflowNotifications || db.notifications || []).filter((item) => (!item.userId || [user?.id, user?.employeeId].includes(item.userId)) && !item.read && !item.readAt).length;
+  const todayLabel = new Intl.DateTimeFormat("uz-UZ", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
 
   return (
     <PageShell
@@ -143,6 +169,19 @@ function EmployeeWorkspacePage({ workspaceKey }) {
       description={isManager ? `${workspace.description} Owner preview rejimi.` : workspace.description}
       actions={<span className="qp-workspace-badge"><Icon size={15}/> {isManager ? "Preview" : "Mening ish joyim"}</span>}
     >
+      <section className="qp-mobile-workspace-overview">
+        <div className="qp-mobile-workspace-greeting">
+          <span className="qp-mobile-workspace-avatar">{(user?.name || "Q").slice(0, 1).toUpperCase()}</span>
+          <div><small>{todayLabel}</small><strong>Salom, {(user?.name || "Xodim").split(" ")[0]}!</strong><span>{config.eyebrow}</span></div>
+          <button type="button" className="qp-mobile-workspace-bell" aria-label={`Bildirishnomalar${unreadNotifications ? `, ${unreadNotifications} ta yangi` : ""}`} onClick={() => navigate("/notifications")}><Bell size={19}/>{unreadNotifications ? <b>{Math.min(unreadNotifications, 99)}</b> : null}</button>
+        </div>
+        <div className="qp-mobile-workspace-plan">
+          <div className="qp-mobile-workspace-plan-head"><span><Target size={18}/><strong>Bugungi reja</strong></span><b>{completedPlan} / {planRows.length}</b></div>
+          <div className="qp-mobile-workspace-progress"><i style={{ width: `${planPercent}%` }}/></div>
+          <div className="qp-mobile-workspace-plan-foot"><span>{planRows.length ? `${planPercent}% bajarildi` : "Bugun uchun vazifa yo‘q"}</span><small><CalendarDays size={13}/> {todayLabel}</small></div>
+        </div>
+      </section>
+
       <section className="qp-employee-workspace-hero">
         <div><Icon size={24}/><span><small>{config.eyebrow}</small><strong>{config.headline}</strong><p>{user?.name || "Xodim"} uchun faqat kundalik ishga kerakli amallar.</p></span></div>
       </section>
@@ -152,8 +191,8 @@ function EmployeeWorkspacePage({ workspaceKey }) {
       </section>
 
       <div className="qp-workspace-quick-grid">
-        {config.actions.map(([label, to, ActionIcon], index) => (
-          <Link key={to} to={to} className={`qp-button ${index === 0 ? "qp-button-primary" : "qp-button-secondary"}`}><ActionIcon size={17}/>{label}</Link>
+        {visibleActions.map(([label, to, ActionIcon], index) => (
+          <Link key={to} to={to} className={`qp-button qp-workspace-action ${index === 0 ? "qp-button-primary" : "qp-button-secondary"}`}><span><ActionIcon size={18}/><b>{label}</b></span><ChevronRight className="qp-workspace-action-arrow" size={16}/></Link>
         ))}
       </div>
 

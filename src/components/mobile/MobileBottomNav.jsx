@@ -1,4 +1,4 @@
-import { BarChart3, CircleDollarSign, Home, Menu, ScanLine, ShoppingBag, Users, Warehouse } from "lucide-react";
+import { BarChart3, CircleDollarSign, ClipboardCheck, Home, Map, Menu, ScanLine, ShoppingBag, Truck, Users, Warehouse } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
 import { useModuleAccess } from "../../hooks/useModuleAccess";
@@ -21,33 +21,43 @@ function MobileBottomNav({ onOpenMenu }) {
   const activeWorkspace = activeWorkspaceKey ? EMPLOYEE_WORKSPACES[activeWorkspaceKey] : null;
   const workspaceShortcuts = {
     agent_workspace: [
-      { key: "workspace", label: "Ish joyi", to: activeWorkspace?.path, icon: Home },
-      { key: "orders", label: "Buyurtma", to: "/orders", icon: ShoppingBag },
-      { key: "customers", label: "Mijoz", to: "/customers", icon: Users },
+      { key: "workspace", label: "Bosh", to: activeWorkspace?.path, icon: Home, visible: true },
+      { key: "customers", label: "Mijozlar", to: "/customers", icon: Users, visible: can(PERMISSIONS.CUSTOMERS_VIEW) },
+      { key: "orders", label: "Buyurtma", to: "/orders", icon: ShoppingBag, visible: can(PERMISSIONS.ORDERS_VIEW) },
+      { key: "routes", label: "Xarita", to: "/routes/today", icon: Map, visible: can(PERMISSIONS.ROUTES_VIEW) },
     ],
     warehouse_workspace: [
-      { key: "workspace", label: "Ish joyi", to: activeWorkspace?.path, icon: Home },
-      { key: "inventory", label: "Ombor", to: "/inventory", icon: Warehouse },
+      { key: "workspace", label: "Bosh", to: activeWorkspace?.path, icon: Home, visible: true },
+      { key: "inventory", label: "Qoldiq", to: "/inventory", icon: Warehouse, visible: can(PERMISSIONS.INVENTORY_VIEW) },
+      { key: "receipts", label: "Kirim", to: "/inventory/receipts", icon: ScanLine, visible: can(PERMISSIONS.INVENTORY_RECEIVE) },
+      { key: "fulfillment", label: "Tayyorlash", to: "/fulfillment", icon: ClipboardCheck, visible: can(PERMISSIONS.FULFILLMENT_VIEW) },
     ],
     fulfillment_workspace: [
-      { key: "workspace", label: "Tayyorlash", to: activeWorkspace?.path, icon: Home },
+      { key: "workspace", label: "Bosh", to: activeWorkspace?.path, icon: Home, visible: true },
+      { key: "fulfillment", label: "Topshiriq", to: "/fulfillment", icon: ClipboardCheck, visible: can(PERMISSIONS.FULFILLMENT_VIEW) },
+      { key: "inventory", label: "Qoldiq", to: "/inventory", icon: Warehouse, visible: can(PERMISSIONS.INVENTORY_VIEW) },
     ],
     driver_workspace: [
-      { key: "workspace", label: "Yetkazish", to: activeWorkspace?.path, icon: Home },
+      { key: "workspace", label: "Bosh", to: activeWorkspace?.path, icon: Home, visible: true },
+      { key: "deliveries", label: "Yetkazish", to: "/deliveries", icon: Truck, visible: can(PERMISSIONS.DELIVERY_VIEW) },
+      { key: "routes", label: "Xarita", to: "/routes/today", icon: Map, visible: can(PERMISSIONS.ROUTES_VIEW) },
     ],
     sales_operator_workspace: [
-      { key: "workspace", label: "Ish joyi", to: activeWorkspace?.path, icon: Home },
-      { key: "orders", label: "Buyurtma", to: "/orders", icon: ShoppingBag },
-      { key: "customers", label: "Mijoz", to: "/customers", icon: Users },
+      { key: "workspace", label: "Bosh", to: activeWorkspace?.path, icon: Home, visible: true },
+      { key: "orders", label: "Buyurtma", to: "/orders", icon: ShoppingBag, visible: can(PERMISSIONS.ORDERS_VIEW) },
+      { key: "customers", label: "Mijozlar", to: "/customers", icon: Users, visible: can(PERMISSIONS.CUSTOMERS_VIEW) },
+      { key: "inventory", label: "Qoldiq", to: "/inventory", icon: Warehouse, visible: can(PERMISSIONS.INVENTORY_VIEW) },
     ],
     cashier_workspace: [
-      { key: "workspace", label: "Kassa", to: activeWorkspace?.path, icon: Home },
-      { key: "finance", label: "To‘lov", to: "/payments", icon: CircleDollarSign },
+      { key: "workspace", label: "Bosh", to: activeWorkspace?.path, icon: Home, visible: true },
+      { key: "pos", label: "Kassa", to: "/sales/pos", icon: ScanLine, visible: can(PERMISSIONS.POS_CREATE), action: "pos" },
+      { key: "finance", label: "To‘lov", to: "/payments", icon: CircleDollarSign, visible: can(PERMISSIONS.PAYMENTS_VIEW) },
+      { key: "customers", label: "Mijozlar", to: "/customers", icon: Users, visible: can(PERMISSIONS.CUSTOMERS_VIEW) },
     ],
   };
 
   const candidates = activeWorkspace && !user?.roles?.some((role) => ["OWNER", "ADMIN"].includes(role))
-    ? (workspaceShortcuts[activeWorkspaceKey] || [])
+    ? (workspaceShortcuts[activeWorkspaceKey] || []).filter((item) => item.visible !== false)
     : [
       { key: "home", label: "Bosh", to: "/dashboard", icon: Home, visible: isEnabled("dashboard") && can(PERMISSIONS.DASHBOARD_VIEW) },
       { key: "orders", label: "Buyurtma", to: "/orders", icon: ShoppingBag, visible: isEnabled("sales") && can(PERMISSIONS.ORDERS_VIEW) },

@@ -16,7 +16,7 @@ function validateCommon(payload) {
   if (!name || !title) throw new Error("Xodim ismi va lavozimini kiriting.");
   if (!String(payload.login || "").trim() && !String(payload.phone || "").trim()) throw new Error("Login yoki telefonni kiriting.");
   if (!Array.isArray(payload.moduleAccess) || !payload.moduleAccess.length) throw new Error("Kamida bitta modul yoki xodim ish joyini tanlang.");
-  if (payload.pin && !/^\d{4,8}$/.test(String(payload.pin))) throw new Error("PIN 4–8 ta raqamdan iborat bo‘lsin.");
+  if (payload.pin && !/^\d{6}$/.test(String(payload.pin))) throw new Error("PIN aynan 6 ta raqamdan iborat bo‘lsin.");
   return { name, title };
 }
 
@@ -39,10 +39,10 @@ function resolveAssignments(payload, refs) {
 
 export async function createEmployeeIdentity(payload) {
   const { name, title } = validateCommon(payload);
-  if (String(payload.password || "").length < 8 || !/[A-Z]/.test(payload.password) || !/[a-z]/.test(payload.password) || !/\d/.test(payload.password)) {
-    throw new Error("Parol kamida 8 belgi, katta-kichik harf va raqamdan iborat bo‘lsin.");
+  if (String(payload.password || "").length < 6) {
+    throw new Error("Parol kamida 6 ta belgidan iborat bo‘lsin.");
   }
-  if (!/^\d{4,8}$/.test(String(payload.pin || ""))) throw new Error("PIN 4–8 ta raqamdan iborat bo‘lsin.");
+  if (!/^\d{6}$/.test(String(payload.pin || ""))) throw new Error("PIN aynan 6 ta raqamdan iborat bo‘lsin.");
   const refs = await loadEmployeeReferences();
   const { role, branch, warehouse, employeeType } = resolveAssignments(payload, refs);
   return apiRequest({ url: "/employees", body: {

@@ -1,4 +1,4 @@
-import { Copy, Plus } from "lucide-react";
+import { CheckCircle2, Copy, Plus, Star } from "lucide-react";
 import { useState } from "react";
 
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
@@ -7,55 +7,100 @@ import Select from "../../../components/ui/Select";
 import { useLocalDb } from "../../../services/localDb";
 import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
-import { getLabel } from "../../../utils/labels";
 import { priceListCustomerCount, normalizePriceList } from "../priceUtils";
 
-const initialForm = { name: "", type: "CUSTOM", basePrice: "WHOLESALE", adjustmentPercent: 0, priority: 10, validFrom: "", validTo: "", status: "ACTIVE" };
+const blankForm = { name: "", currency: "UZS", isDefault: false, status: "ACTIVE" };
 
 function PriceListsPage() {
   const db = useLocalDb();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState("");
-  const [form, setForm] = useState(initialForm);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState(blankForm);
   const rows = (db.priceLists || []).map((item) => ({ ...normalizePriceList(item), customers: priceListCustomerCount(db, item.id) }));
 
-  const startCreate = () => { setEditingId(""); setForm(initialForm); setOpen(true); };
-  const startEdit = (row) => { setEditingId(row.id); setForm({ ...initialForm, ...row }); setOpen(true); };
+  const startCreate = () => {
+    setEditingId("");
+    setForm({ ...blankForm, currency: db.settings.company.currency || "UZS", isDefault: rows.length === 0 });
+    setOpen(true);
+  };
+
+  const startEdit = (row) => {
+    setEditingId(row.id);
+    setForm({ name: row.name || "", currency: row.currency || db.settings.company.currency || "UZS", isDefault: Boolean(row.isDefault), status: row.status || "ACTIVE" });
+    setOpen(true);
+  };
+
   const submit = async (event) => {
     event.preventDefault();
-    if (!form.name.trim()) { notify("Narx ro‘yxati nomini kiriting", "warning"); return; }
-    const payload = { name: form.name.trim(), code: editingId ? undefined : `PL-${Date.now().toString(36).toUpperCase()}`, currency: db.settings.company.currency || "UZS", status: form.status };
-    await apiRequest({ url: editingId ? `/pricing/${editingId}` : "/pricing", method: editingId ? "PATCH" : "POST", body: payload });
-    notify(editingId ? "Narx ro‘yxati yangilandi" : "Narx ro‘yxati yaratildi");
-    setOpen(false);
+    if (busy) return;
+    if (!form.name.trim()) return notify("Narx ro‘yxati nomini kiriting", "warning");
+    if (!editingId && rows.some((row) => row.name.trim().toLowerCase() === form.name.trim().toLowerCase())) {
+      return notify("Bu nomdagi narx ro‘yxati mavjud", "warning");
+    }
+    if (editingId && form.status === "INACTIVE" && form.isDefault) {
+      return notify("Asosiy narx ro‘yxatini avval boshqa ro‘yxatga almashtiring", "warning");
+    }
+
+    setBusy(true);
+    try {
+      const payload = {
+        name: form.name.trim(),
+        currency: String(form.currency || "UZS").toUpperCase(),
+        isDefault: Boolean(form.isDefault),
+        status: form.status,
+        ...(editingId ? {} : { code: `PL-${Date.now().toString(36).toUpperCase()}` }),
+      };
+      await apiRequest({ url: editingId ? `/pricing/${editingId}` : "/pricing", method: editingId ? "PATCH" : "POST", body: payload });
+      notify(editingId ? "Narx ro‘yxati yangilandi" : "Narx ro‘yxati yaratildi");
+      setOpen(false);
+    } catch (error) {
+      notify(error.message, "danger");
+    } finally {
+      setBusy(false);
+    }
   };
+
   const duplicate = async (row) => {
-    await apiRequest({ url: "/pricing", body: { name: `${row.name} nusxa`, code: `PL-${Date.now().toString(36).toUpperCase()}`, currency: row.currency || "UZS", status: "ACTIVE" } });
-    notify("Narx ro‘yxati nusxalandi");
+    try {
+      await apiRequest({ url: "/pricing", body: { name: `${row.name} nusxa`, code: `PL-${Date.now().toString(36).toUpperCase()}`, currency: row.currency || db.settings.company.currency || "UZS", isDefault: false, status: "ACTIVE" } });
+      notify("Narx ro‘yxati nusxalandi");
+    } catch (error) { notify(error.message, "danger"); }
   };
 
   return <>
-    <SmartTablePage title="Narx ro‘yxatlari" description="Sotuv narxi, tannarx, VIP va maxsus mijozlar uchun narx siyosatini boshqaring. Mijoz tanlanganda tegishli narx buyurtmada avtomatik ishlaydi." eyebrow="Sozlamalar" rows={rows} searchFields={["name", "type", "status"]} actions={<PrimaryButton onClick={startCreate}><Plus size={15}/> Narx ro‘yxati</PrimaryButton>} columns={[
-      { key: "name", label: "Nomi", render: (row) => <div><strong>{row.name}</strong><span className="qp-muted">{getLabel(row.type)}</span></div> },
-      { key: "basePrice", label: "Asos", render: (row) => row.basePrice === "RETAIL" ? "Sotuv narxi" : "Tannarx" },
-      { key: "adjustmentPercent", label: "O‘zgarish", render: (row) => `${Number(row.adjustmentPercent || 0) > 0 ? "+" : ""}${row.adjustmentPercent || 0}%` },
-      { key: "customers", label: "Mijozlar", render: (row) => `${row.customers} ta` },
-      { key: "priority", label: "Ustuvorlik" },
-      { key: "status", label: "Holat", render: (row) => <StatusPill status={row.status}/> },
-      { key: "actions", label: "Amal", sortable: false, render: (row) => <div className="qp-inline-actions"><SecondaryButton onClick={() => startEdit(row)}>Tahrirlash</SecondaryButton><button type="button" className="qp-icon-button" title="Nusxalash" onClick={() => duplicate(row)}><Copy size={14}/></button></div> },
-    ]}/>
-    <Modal open={open} title={editingId ? "Narx ro‘yxatini tahrirlash" : "Yangi narx ro‘yxati"} description="Narx mahsulotning sotuv narxi yoki tannarxidan foiz orqali hisoblanadi." onClose={() => setOpen(false)} wide>
-      <form onSubmit={submit}><div className="qp-form-grid">
-        <Field label="Nomi"><input className="qp-input" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })}/></Field>
-        <Field label="Turi"><Select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}><option value="RETAIL">Sotuv narxi</option><option value="WHOLESALE">Tannarx</option><option value="VIP">VIP</option><option value="PROMO">Aksiya</option><option value="CUSTOM">Maxsus</option></Select></Field>
-        <Field label="Narx asosi"><Select value={form.basePrice} onChange={(event) => setForm({ ...form, basePrice: event.target.value })}><option value="RETAIL">Sotuv narxi</option><option value="WHOLESALE">Tannarx</option></Select></Field>
-        <Field label="Foizli o‘zgarish" hint="Masalan -5 = 5% chegirma, 10 = 10% ustama"><input className="qp-input" type="number" step="0.1" value={form.adjustmentPercent} onChange={(event) => setForm({ ...form, adjustmentPercent: event.target.value })}/></Field>
-        <Field label="Ustuvorlik"><input className="qp-input" type="number" min="0" value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}/></Field>
-        <Field label="Holat"><Select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="ACTIVE">Faol</option><option value="INACTIVE">Faolsiz</option></Select></Field>
-        <Field label="Amal boshlanishi"><input className="qp-input" type="date" value={form.validFrom} onChange={(event) => setForm({ ...form, validFrom: event.target.value })}/></Field>
-        <Field label="Amal tugashi"><input className="qp-input" type="date" value={form.validTo} onChange={(event) => setForm({ ...form, validTo: event.target.value })}/></Field>
-      </div><div className="qp-form-actions"><SecondaryButton type="button" onClick={() => setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit">Saqlash</PrimaryButton></div></form>
+    <SmartTablePage
+      title="Narx ro‘yxatlari"
+      description="Asosiy narx va mijoz guruhlari uchun kerakli narx ro‘yxatlarini boshqaring. Narx turlarini biznesingizga mos nom va tartibda o‘zingiz yaratasiz."
+      eyebrow="Sozlamalar"
+      rows={rows}
+      searchFields={["name", "code", "currency", "status"]}
+      actions={<PrimaryButton onClick={startCreate}><Plus size={15}/> Narx ro‘yxati</PrimaryButton>}
+      columns={[
+        { key: "name", label: "Nomi", render: (row) => <div className="qp-price-list-name"><strong>{row.name}</strong>{row.isDefault ? <span><Star size={12}/> Asosiy</span> : null}</div> },
+        { key: "code", label: "Kod" },
+        { key: "currency", label: "Valyuta" },
+        { key: "customers", label: "Mijozlar", render: (row) => `${row.customers} ta` },
+        { key: "status", label: "Holat", render: (row) => <StatusPill status={row.status}/> },
+        { key: "actions", label: "Amal", sortable: false, render: (row) => <div className="qp-inline-actions"><SecondaryButton onClick={() => startEdit(row)}>Tahrirlash</SecondaryButton><button type="button" className="qp-icon-button" title="Nusxalash" onClick={() => duplicate(row)}><Copy size={14}/></button></div> },
+      ]}
+    />
+    <Modal open={open} title={editingId ? "Narx ro‘yxatini tahrirlash" : "Yangi narx ro‘yxati"} description="Masalan: Asosiy narx, Distributor, VIP, Korporativ yoki Promo. Mahsulot narxlari shu ro‘yxatga alohida biriktiriladi." onClose={() => !busy && setOpen(false)}>
+      <form onSubmit={submit}>
+        <div className="qp-form-grid">
+          <Field label="Nomi"><input className="qp-input" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Masalan: Distributor" autoFocus /></Field>
+          <Field label="Valyuta"><input className="qp-input" maxLength={3} value={form.currency} onChange={(event) => setForm({ ...form, currency: event.target.value.replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 3) })} placeholder="UZS" /></Field>
+          <Field label="Holat"><Select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="ACTIVE">Faol</option><option value="INACTIVE">Faolsiz</option></Select></Field>
+          <label className={`qp-price-list-default-card ${form.isDefault ? "active" : ""}`}>
+            <input type="checkbox" checked={form.isDefault} onChange={(event) => setForm({ ...form, isDefault: event.target.checked })}/>
+            <CheckCircle2 size={19}/>
+            <span><strong>Asosiy narx sifatida ishlatish</strong><small>Mijozga boshqa narx ro‘yxati biriktirilmagan bo‘lsa shu narx ishlaydi.</small></span>
+          </label>
+        </div>
+        <div className="qp-form-actions"><SecondaryButton type="button" disabled={busy} onClick={() => setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit" disabled={busy}>{busy ? "Saqlanmoqda..." : "Saqlash"}</PrimaryButton></div>
+      </form>
     </Modal>
   </>;
 }
+
 export default PriceListsPage;

@@ -27,7 +27,7 @@ function CustomersPage() {
 
   useEffect(() => {
     if (searchParams.get("create") === "1") {
-      setForm((current) => ({ ...current, priceListId: current.priceListId || db.priceLists.find((item) => item.isDefault)?.id || db.priceLists[0]?.id || "" }));
+      setForm((current) => ({ ...current, priceListId: current.priceListId || db.priceLists.find((item) => item.isDefault && !["INACTIVE", "ARCHIVED"].includes(item.status))?.id || db.priceLists.find((item) => !["INACTIVE", "ARCHIVED"].includes(item.status))?.id || "" }));
       setOpen(true);
       const next = new URLSearchParams(searchParams);
       next.delete("create");
@@ -54,7 +54,7 @@ function CustomersPage() {
       eyebrow="Hamkorlar"
       rows={rows}
       searchFields={["name", "phone", "address", "territory", "agent", "taxId", "category"]}
-      actions={can(PERMISSIONS.CUSTOMERS_CREATE) ? <PrimaryButton onClick={() => { setForm({ ...emptyForm, priceListId: db.priceLists.find((item) => item.isDefault)?.id || db.priceLists[0]?.id || "" }); setOpen(true); }}><Plus size={15} /> Yangi mijoz</PrimaryButton> : null}
+      actions={can(PERMISSIONS.CUSTOMERS_CREATE) ? <PrimaryButton onClick={() => { setForm({ ...emptyForm, priceListId: db.priceLists.find((item) => item.isDefault && !["INACTIVE", "ARCHIVED"].includes(item.status))?.id || db.priceLists.find((item) => !["INACTIVE", "ARCHIVED"].includes(item.status))?.id || "" }); setOpen(true); }}><Plus size={15} /> Yangi mijoz</PrimaryButton> : null}
       detailTitle={(row) => row.name}
       detailDescription={(row) => row.address || row.phone || "Mijoz tafsilotlari"}
       detailRenderer={(row) => <div className="qp-stack">
@@ -95,7 +95,7 @@ function CustomersPage() {
           <Field label="Hudud"><input className="qp-input" value={form.territory} onChange={(event) => setForm({ ...form, territory: event.target.value })} /></Field>
           <div className="qp-form-span-full"><LocationPicker value={form} onChange={(location) => setForm({ ...form, ...location })} /></div>
           <Field label="Agent"><Select value={form.agentId} onChange={(event) => setForm({ ...form, agentId: event.target.value })}><option value="">Biriktirilmagan</option>{operationalAgents.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></Field>
-          <Field label="Narx ro‘yxati"><Select value={form.priceListId} onChange={(event) => setForm({ ...form, priceListId: event.target.value })}>{db.priceLists.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></Field>
+          <Field label="Narx ro‘yxati"><Select value={form.priceListId} onChange={(event) => setForm({ ...form, priceListId: event.target.value })}>{db.priceLists.filter((item) => !["INACTIVE", "ARCHIVED"].includes(item.status)).map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></Field>
           <Field label="Kredit limiti"><input className="qp-input" type="number" min="0" value={form.creditLimit} onChange={(event) => setForm({ ...form, creditLimit: event.target.value })} /></Field>
         </div>
         <div className="qp-form-actions"><SecondaryButton type="button" onClick={() => setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit">Saqlash</PrimaryButton></div>

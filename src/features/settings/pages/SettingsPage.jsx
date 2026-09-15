@@ -322,7 +322,7 @@ function PosSettings({ db }) {
       <div className="qp-settings-panel">
         <div className="qp-form-grid qp-settings-inline-form">
           <Field label="Kassa ombori"><Select value={db.settings.pos.warehouseId} onChange={(event) => setSetting("pos", "warehouseId", event.target.value)}>{db.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select></Field>
-          <Field label="Narx ro‘yxati"><Select value={db.settings.pos.priceListId} onChange={(event) => setSetting("pos", "priceListId", event.target.value)}>{db.priceLists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}</Select></Field>
+          <Field label="Narx ro‘yxati"><Select value={db.settings.pos.priceListId} onChange={(event) => setSetting("pos", "priceListId", event.target.value)}>{db.priceLists.filter((list) => !["INACTIVE", "ARCHIVED"].includes(list.status)).map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}</Select></Field>
         </div>
         <SettingRow title="Anonim mijoz" description="Mijoz tanlamasdan sotuvga ruxsat"><Toggle value={db.settings.pos.allowAnonymousCustomer} onChange={(value) => setSetting("pos", "allowAnonymousCustomer", value)} /></SettingRow>
         <SettingRow title="Mahsulot rasmi" description="Kassa katalogida vizual mahsulot blokini ko‘rsatish"><Toggle value={db.settings.pos.showImages} onChange={(value) => setSetting("pos", "showImages", value)} /></SettingRow>

@@ -27,3 +27,13 @@ export function openPosWorkspace(navigate) {
   navigate?.("/sales/pos");
   return false;
 }
+export function exitPosWorkspace(navigate) {
+  if (typeof window === "undefined") return;
+  const openedAsPosWindow = window.name === "qulay-pos" || Boolean(window.opener);
+  if (openedAsPosWindow) {
+    window.close();
+    window.setTimeout(() => { if (!window.closed) navigate?.("/"); }, 80);
+    return;
+  }
+  navigate?.("/");
+}

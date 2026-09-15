@@ -30,7 +30,7 @@ function LoginForm({ onSubmit, loading = false, error = "" }) {
     event.preventDefault();
     if (loading || lockSeconds) return;
     if (form.mode === "password") { onSubmit?.(form); return; }
-    if (form.pin.length < 4 || form.pin.length > 8) return;
+    if (form.pin.length !== 6) return;
     lastSubmittedPin.current = form.pin;
     onSubmit?.(form);
   };
@@ -62,9 +62,9 @@ function LoginForm({ onSubmit, loading = false, error = "" }) {
         <Field label="Login yoki telefon">
           <input className="qp-input" autoComplete="username" placeholder="Login yoki +998 90 123 45 67" value={form.identifier} onChange={(event) => setForm({ ...form, identifier: event.target.value })} required />
         </Field>
-        <PinKeypad value={form.pin} onChange={(pin) => { lastSubmittedPin.current = ""; setForm({ ...form, pin }); }} disabled={loading} error={error} lockSeconds={lockSeconds} maxLength={8} label="4–8 xonali PIN" />
-        <div className="qp-auth-pin-hint">Xodimga berilgan 4–8 xonali PINni kiriting.</div>
-        <PrimaryButton className="qp-auth-submit" type="submit" disabled={loading || lockSeconds > 0 || form.pin.length < 4}><LogIn size={17} /> {loading ? "Tekshirilmoqda..." : "PIN bilan kirish"}</PrimaryButton>
+        <PinKeypad value={form.pin} onChange={(pin) => { lastSubmittedPin.current = ""; setForm({ ...form, pin }); }} disabled={loading} error={error} lockSeconds={lockSeconds} maxLength={6} label="6 xonali PIN" />
+        <div className="qp-auth-pin-hint">Xodimga berilgan 6 xonali PINni kiriting.</div>
+        <PrimaryButton className="qp-auth-submit" type="submit" disabled={loading || lockSeconds > 0 || form.pin.length !== 6}><LogIn size={17} /> {loading ? "Tekshirilmoqda..." : "PIN bilan kirish"}</PrimaryButton>
       </>}
     </form>
   );

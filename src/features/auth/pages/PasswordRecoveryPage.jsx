@@ -17,7 +17,7 @@ export default function PasswordRecoveryPage({ reset = false }) {
   };
   return <div className="qp-auth-card"><div className="qp-auth-card-head"><span>Hisob xavfsizligi</span><h2>{reset ? "Yangi parol" : "Parolni tiklash"}</h2></div>
     <form className="qp-auth-form" onSubmit={submit}>{error ? <div className="qp-auth-error">{error}</div> : null}{message ? <div className="qp-auth-success">{message}</div> : null}
-      {reset ? <Field label="Yangi parol" hint="Kamida 8 belgi, katta-kichik harf va raqam"><input className="qp-input" type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></Field>
+      {reset ? <Field label="Yangi parol" hint="Kamida 6 ta belgi"><input className="qp-input" type="password" minLength={6} value={password} onChange={(event) => setPassword(event.target.value)} required /></Field>
         : <Field label="Login, telefon yoki email"><input className="qp-input" value={identifier} onChange={(event) => setIdentifier(event.target.value)} required /></Field>}
       <PrimaryButton type="submit" disabled={busy}>{busy ? "Yuborilmoqda..." : reset ? "Parolni saqlash" : "Tiklash so‘rovini yuborish"}</PrimaryButton>
     </form><div className="qp-auth-footer"><Link to="/login">Kirishga qaytish</Link></div></div>;

@@ -16,8 +16,8 @@ function ChangePasswordPage() {
   const submit = async (event) => {
     event.preventDefault();
     setError("");
-    if (form.next.length < 8 || !/[A-Z]/.test(form.next) || !/[a-z]/.test(form.next) || !/\d/.test(form.next)) {
-      setError("Yangi parol kamida 8 belgi, katta-kichik harf va raqamdan iborat bo‘lsin.");
+    if (form.next.length < 6) {
+      setError("Yangi parol kamida 6 ta belgidan iborat bo‘lsin.");
       return;
     }
     if (form.next !== form.confirm) {
@@ -50,7 +50,7 @@ function ChangePasswordPage() {
             <button type="button" aria-label="Parolni ko‘rsatish" onClick={() => setShow((value) => !value)}>{show ? <EyeOff size={17} /> : <Eye size={17} />}</button>
           </div>
         </Field>
-        <Field label="Yangi parol">
+        <Field label="Yangi parol" hint="Kamida 6 ta belgi; katta harf, raqam yoki maxsus belgi majburiy emas">
           <input className="qp-input" type={show ? "text" : "password"} autoComplete="new-password" value={form.next} onChange={(event) => setForm({ ...form, next: event.target.value })} required />
         </Field>
         <Field label="Yangi parolni takrorlang">

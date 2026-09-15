@@ -18,12 +18,6 @@ function LoginForm({ onSubmit, loading = false, error = "" }) {
   }, [lockSeconds]);
 
   useEffect(() => {
-    if (form.mode !== "pin" || form.pin.length !== 6 || loading || lockSeconds || lastSubmittedPin.current === form.pin) return;
-    lastSubmittedPin.current = form.pin;
-    onSubmit?.(form);
-  }, [form, loading, lockSeconds, onSubmit]);
-
-  useEffect(() => {
     if (form.mode !== "pin" || !error || !lastSubmittedPin.current) return;
     const nextFailures = failedPins + 1;
     setFailedPins(nextFailures >= 5 ? 0 : nextFailures);
@@ -34,7 +28,11 @@ function LoginForm({ onSubmit, loading = false, error = "" }) {
 
   const submit = (event) => {
     event.preventDefault();
-    if (form.mode === "password") onSubmit?.(form);
+    if (loading || lockSeconds) return;
+    if (form.mode === "password") { onSubmit?.(form); return; }
+    if (form.pin.length < 4 || form.pin.length > 8) return;
+    lastSubmittedPin.current = form.pin;
+    onSubmit?.(form);
   };
 
   const setMode = (mode) => {
@@ -64,8 +62,9 @@ function LoginForm({ onSubmit, loading = false, error = "" }) {
         <Field label="Login yoki telefon">
           <input className="qp-input" autoComplete="username" placeholder="Login yoki +998 90 123 45 67" value={form.identifier} onChange={(event) => setForm({ ...form, identifier: event.target.value })} required />
         </Field>
-        <PinKeypad value={form.pin} onChange={(pin) => { lastSubmittedPin.current = ""; setForm({ ...form, pin }); }} disabled={loading} error={error} lockSeconds={lockSeconds} />
-        <div className="qp-auth-pin-hint">6-raqam kiritilganda avtomatik tekshiriladi</div>
+        <PinKeypad value={form.pin} onChange={(pin) => { lastSubmittedPin.current = ""; setForm({ ...form, pin }); }} disabled={loading} error={error} lockSeconds={lockSeconds} maxLength={8} label="4–8 xonali PIN" />
+        <div className="qp-auth-pin-hint">Xodimga berilgan 4–8 xonali PINni kiriting.</div>
+        <PrimaryButton className="qp-auth-submit" type="submit" disabled={loading || lockSeconds > 0 || form.pin.length < 4}><LogIn size={17} /> {loading ? "Tekshirilmoqda..." : "PIN bilan kirish"}</PrimaryButton>
       </>}
     </form>
   );

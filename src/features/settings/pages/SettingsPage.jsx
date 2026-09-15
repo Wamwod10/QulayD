@@ -285,7 +285,7 @@ function GeneralSettings({ db }) {
   return (
     <SectionCard title="Umumiy sozlamalar" description="Kompaniya bo‘yicha asosiy qiymatlar platformaning boshqa bo‘limlarida ham ishlatiladi.">
       <div className="qp-settings-panel qp-form-grid">
-        <div className="qp-form-span-full"><ImageUploader value={db.settings.company.logo || ""} name={db.settings.company.name} label="Kompaniya logosi" compact onChange={(logo) => setSetting("company", "logo", logo)} /></div>
+        <div className="qp-form-span-full"><ImageUploader purpose="company" value={db.settings.company.logo || ""} name={db.settings.company.name} label="Kompaniya logosi" compact onChange={(logo) => setSetting("company", "logo", logo)} /></div>
         <Field label="Kompaniya nomi"><input className="qp-input" value={db.settings.company.name} onChange={(event) => setSetting("company", "name", event.target.value)} /></Field>
         <Field label="Ko‘rinadigan valyuta"><Select searchable value={db.settings.company.currency} onChange={(event) => setSetting("company", "currency", event.target.value)}><option value="UZS">UZS — O‘zbekiston so‘mi</option><option value="USD">USD — AQSH dollari</option><option value="EUR">EUR — Yevro</option><option value="RUB">RUB — Rossiya rubli</option><option value="GBP">GBP — Funt sterling</option><option value="CNY">CNY — Xitoy yuani</option><option value="AED">AED — BAA dirhami</option></Select></Field>
         <Field label="Asosiy ombor"><Select value={db.settings.company.defaultWarehouseId} onChange={(event) => setSetting("company", "defaultWarehouseId", event.target.value)}>{db.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select></Field>

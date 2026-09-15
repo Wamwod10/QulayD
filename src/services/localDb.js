@@ -136,15 +136,30 @@ export function normalizeRemoteData(remote = {}) {
     Array.isArray(value) ? value.map((item) => relationDisplayFields(item, RELATION_KEYS)) : value,
   ]));
   mapped.settings = remote.settingsRecord?.data || {};
-  mapped.products = (remote.products || []).map((item) => ({
-    ...relationDisplayFields(item, RELATION_KEYS),
-    barcode: item.barcodes?.find((code) => code.isPrimary)?.barcode || item.barcodes?.[0]?.barcode || "",
-    barcodes: item.barcodes?.map((code) => code.barcode) || [],
-    image: item.imageUrl || "",
-    price: Number(item.prices?.[0]?.price || 0),
-    wholesalePrice: Number(item.prices?.[1]?.price || item.prices?.[0]?.price || 0),
-    stocks: (item.stocks || []).map((stock) => ({ ...stock, onHand: Number(stock.onHand || 0), reserved: Number(stock.reserved || 0) })),
-  }));
+  mapped.products = (remote.products || []).map((item) => {
+    const currentPrices = [...(item.prices || [])].sort((a, b) => Number(Boolean(b.priceList?.isDefault)) - Number(Boolean(a.priceList?.isDefault)));
+    const primaryPrice = currentPrices.find((entry) => entry.priceList?.isDefault) || currentPrices[0];
+    const secondaryPrice = currentPrices.find((entry) => entry.id !== primaryPrice?.id);
+    return {
+      ...relationDisplayFields(item, RELATION_KEYS),
+      barcode: item.barcodes?.find((code) => code.isPrimary)?.barcode || item.barcodes?.[0]?.barcode || "",
+      barcodes: item.barcodes?.map((code) => code.barcode) || [],
+      image: item.imageUrl || "",
+      price: Number(primaryPrice?.price || 0),
+      wholesalePrice: Number(secondaryPrice?.price ?? primaryPrice?.price ?? 0),
+      prices: currentPrices,
+      stocks: (item.stocks || []).map((stock) => ({ ...stock, onHand: Number(stock.onHand || 0), reserved: Number(stock.reserved || 0) })),
+    };
+  });
+  mapped.customers = (remote.customers || []).map((item) => {
+    const metadata = item.metadata && typeof item.metadata === "object" ? item.metadata : {};
+    return { ...relationDisplayFields(item, RELATION_KEYS), ...metadata, image: metadata.image || "", agentId: metadata.agentId || "", priceListId: metadata.priceListId || "",
+      customerType: metadata.customerType || "ORGANIZATION", category: metadata.category || "", territory: metadata.territory || "", debt: Number(item.balance || 0), creditLimit: Number(item.creditLimit || 0) };
+  });
+  mapped.suppliers = (remote.suppliers || []).map((item) => {
+    const metadata = item.metadata && typeof item.metadata === "object" ? item.metadata : {};
+    return { ...relationDisplayFields(item, RELATION_KEYS), ...metadata, image: metadata.image || "", contact: metadata.contact || "", balance: Number(item.balance || 0) };
+  });
   mapped.orders = (remote.orders || []).map((item) => ({
     ...relationDisplayFields(item, RELATION_KEYS),
     date: item.orderedAt || item.createdAt,

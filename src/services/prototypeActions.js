@@ -25,14 +25,14 @@ export async function adjustProductStock({ productId, warehouseId, newOnHand, cu
 
 export async function createCustomer(payload) {
   return perform({ url: "/customers", body: { code: payload.code || `CUS-${Date.now().toString(36).toUpperCase()}`, name: payload.name,
-    phone: payload.phone || undefined, address: payload.address || undefined, latitude: payload.latitude || undefined,
-    longitude: payload.longitude || undefined, taxId: payload.taxId || undefined, creditLimit: Number(payload.creditLimit || 0),
-    status: payload.status || "ACTIVE", metadata: { customerType: payload.customerType, category: payload.category, territory: payload.territory, agentId: payload.agentId, priceListId: payload.priceListId } } }, "Mijoz yaratildi");
+    phone: payload.phone || undefined, address: payload.address || undefined, latitude: payload.latitude == null ? undefined : Number(payload.latitude),
+    longitude: payload.longitude == null ? undefined : Number(payload.longitude), taxId: payload.taxId || undefined, creditLimit: Number(payload.creditLimit || 0),
+    status: payload.status || "ACTIVE", metadata: { customerType: payload.customerType, category: payload.category, territory: payload.territory, agentId: payload.agentId || null, priceListId: payload.priceListId || null, image: payload.image || null } } }, "Mijoz yaratildi");
 }
 
 export async function createSupplier(payload) {
   return perform({ url: "/suppliers", body: { code: payload.code || `SUP-${Date.now().toString(36).toUpperCase()}`, name: payload.name,
-    phone: payload.phone || undefined, status: payload.status || "ACTIVE" } }, "Yetkazib beruvchi yaratildi");
+    phone: payload.phone || undefined, status: payload.status || "ACTIVE", metadata: { contact: payload.contact || null, image: payload.image || null } } }, "Yetkazib beruvchi yaratildi");
 }
 
 export async function createOrder(payload) {
@@ -85,7 +85,7 @@ export async function approveTransfer(id) {
   return approved.ok ? perform({ url: `/inventory/transfers/${id}/complete`, body: {} }, "Ko‘chirish yakunlandi") : approved;
 }
 
-function proofPayload(proof = {}) { return { recipientName: proof.recipientName || undefined, latitude: proof.latitude || undefined, longitude: proof.longitude || undefined,
+function proofPayload(proof = {}) { return { recipientName: proof.recipientName || undefined, latitude: proof.latitude == null ? undefined : Number(proof.latitude), longitude: proof.longitude == null ? undefined : Number(proof.longitude),
   photoUrl: proof.photoUrl || proof.photo || undefined, note: proof.note || undefined }; }
 export const arriveDelivery = (id, location = {}) => perform({ url: `/delivery/deliveries/${id}/arrive`, body: proofPayload(location) }, "Manzilga yetib kelindi");
 export const completeDelivery = (id, proof = {}) => perform({ url: `/delivery/deliveries/${id}/complete`, body: proofPayload(proof) }, "Yetkazib berish yakunlandi");

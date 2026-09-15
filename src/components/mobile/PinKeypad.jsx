@@ -2,12 +2,12 @@ import { Delete } from "lucide-react";
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "delete"];
 
-function PinKeypad({ value, onChange, disabled = false, label = "6 xonali PIN", error = "", lockSeconds = 0 }) {
-  const digits = Array.from({ length: 6 }, (_, index) => value[index] || "");
+function PinKeypad({ value, onChange, disabled = false, label = "PIN", error = "", lockSeconds = 0, maxLength = 6 }) {
+  const digits = Array.from({ length: maxLength }, (_, index) => value[index] || "");
   const press = (key) => {
     if (disabled || lockSeconds > 0) return;
     if (key === "delete") onChange(value.slice(0, -1));
-    else if (key && value.length < 6) onChange(`${value}${key}`);
+    else if (key && value.length < maxLength) onChange(`${value}${key}`);
   };
 
   return (

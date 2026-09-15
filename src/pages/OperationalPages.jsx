@@ -183,7 +183,7 @@ export function DeliveriesPage() {
       ) : null}
       {db.settings.delivery.requirePhoto ? (
         <div className="qp-form-span-full">
-          <ImageUploader value={proof.photo || ""} name={proof.recipientName || "Yetkazish"} label="Yetkazilganini tasdiqlovchi foto" compact onChange={(photo) => setProof((current) => ({ ...current, photo, photoName: photo ? "delivery-proof.webp" : "" }))} />
+          <ImageUploader purpose="delivery-proof" value={proof.photo || ""} name={proof.recipientName || "Yetkazish"} label="Yetkazilganini tasdiqlovchi foto" compact onChange={(photo) => setProof((current) => ({ ...current, photo, photoName: photo ? "delivery-proof.webp" : "" }))} />
         </div>
       ) : null}
       {db.settings.delivery.requireGps ? (

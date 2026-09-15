@@ -1,12 +1,12 @@
 import { ImagePlus, Trash2, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
 
-import { compressImageFile, imageInitial } from "../../../utils/imageStorage";
+import { imageInitial } from "../../../utils/imageStorage";
 import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 import "./ImageUploader.scss";
 
-function ImageUploader({ value = "", onChange, label = "Rasm", name = "", compact = false, multiple = false, maxFiles = 10 }) {
+function ImageUploader({ value = "", onChange, label = "Rasm", name = "", compact = false, multiple = false, maxFiles = 10, purpose = "product" }) {
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -19,8 +19,7 @@ function ImageUploader({ value = "", onChange, label = "Rasm", name = "", compac
     try {
       const uploadedUrls = [];
       for (const file of selected) {
-        await compressImageFile(file);
-        const body = new FormData(); body.append("image", file); body.append("purpose", "product");
+        const body = new FormData(); body.append("image", file); body.append("purpose", purpose);
         const uploaded = await apiRequest({ url: "/uploads/images", body }); uploadedUrls.push(uploaded.url);
       }
       onChange?.(multiple ? [...values, ...uploadedUrls].slice(0, maxFiles) : uploadedUrls[0]);

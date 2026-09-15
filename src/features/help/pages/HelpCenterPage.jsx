@@ -36,7 +36,7 @@ function HelpCenterPage() {
           <aside className="qp-card">
             <strong>{selected.title}</strong>
             <p>{selected.summary}</p>
-            <div>{visibleCategories.map((category) => <button type="button" key={category.id} onClick={() => navigate("/help")}>{category.title}</button>)}</div>
+            <div>{visibleCategories.map((category) => <button type="button" key={category.id} className={category.id === selected.categoryId ? "active" : ""} onClick={() => navigate(`/help/${category.articles[0].id}`)}>{category.title}</button>)}</div>
           </aside>
           <article className="qp-card">
             <span className="qp-help-eyebrow"><BookOpen size={15} /> Amaliy qo‘llanma</span>

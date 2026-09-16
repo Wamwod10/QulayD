@@ -1,5 +1,5 @@
 import { Download, RefreshCw, Share2, Smartphone, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRegisterSW } from "virtual:pwa-register/react";
 
 import { useAuth } from "../hooks/useAuth";
@@ -31,16 +31,34 @@ function PwaLifecycle() {
   const [installPrompt, setInstallPrompt] = useState(null);
   const [showInstall, setShowInstall] = useState(false);
   const [showIosHelp, setShowIosHelp] = useState(false);
+  const registrationRef = useRef(null);
   const ios = useMemo(() => isIosDevice(), []);
   const {
     offlineReady: [offlineReady, setOfflineReady],
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
+    onRegisteredSW(_url, registration) {
+      registrationRef.current = registration || null;
+    },
     onRegisterError() {
       notify("Ilova yangilanish xizmatini ishga tushirib bo‘lmadi", "warning");
     },
   });
+
+  useEffect(() => {
+    const checkForUpdate = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) registrationRef.current?.update?.().catch(() => undefined);
+    };
+    const timer = window.setInterval(checkForUpdate, 15 * 60 * 1000);
+    window.addEventListener("online", checkForUpdate);
+    document.addEventListener("visibilitychange", checkForUpdate);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("online", checkForUpdate);
+      document.removeEventListener("visibilitychange", checkForUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     if (!offlineReady) return;

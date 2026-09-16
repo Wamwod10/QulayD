@@ -5,6 +5,7 @@ import { Download, Edit3, LoaderCircle, Plus, RotateCcw, ShieldCheck, Smartphone
 import { useEffect, useState } from "react";
 
 import {
+  ConfirmActionModal,
   Field,
   Modal,
   PageShell,
@@ -342,6 +343,7 @@ function PaymentMethodsSettings({ db }) {
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState(empty);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const openCreate = () => { setEditing(null); setForm(empty); setOpen(true); };
   const openEdit = (method) => {
@@ -384,13 +386,14 @@ function PaymentMethodsSettings({ db }) {
     finally { setBusy(false); }
   };
 
-  const remove = async (method) => {
-    if (busy) return;
-    if (!window.confirm(`“${method.name}” to‘lov usulini o‘chirasizmi? Tarixiy to‘lovlar saqlanadi.`)) return;
+  const remove = (method) => setDeleteTarget(method);
+  const confirmRemove = async () => {
+    if (busy || !deleteTarget) return;
     setBusy(true);
     try {
-      await apiRequest({ url: `/pos/payment-methods/${method.id}`, method: "DELETE" });
+      await apiRequest({ url: `/pos/payment-methods/${deleteTarget.id}`, method: "DELETE" });
       notify("To‘lov usuli o‘chirildi", "warning");
+      setDeleteTarget(null);
     } catch (error) { notify(error.message, "danger"); }
     finally { setBusy(false); }
   };
@@ -411,6 +414,7 @@ function PaymentMethodsSettings({ db }) {
       <Field label="Komissiya turi"><Select value={form.commissionType} onChange={(event)=>setForm({...form,commissionType:event.target.value})}><option value="NONE">Komissiyasiz</option><option value="PERCENT">Foiz</option><option value="FIXED">Belgilangan summa</option></Select></Field>
       {form.commissionType === "PERCENT" ? <Field label="Komissiya (%)"><input className="qp-input" type="number" min="0" max="100" step="0.01" value={form.commissionRate} onChange={(event)=>setForm({...form,commissionRate:event.target.value})}/></Field> : null}
     </div><div className="qp-form-actions"><SecondaryButton type="button" disabled={busy} onClick={()=>setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit" disabled={busy}>{busy ? <><LoaderCircle className="qp-spin" size={15}/> Saqlanmoqda...</> : "Saqlash"}</PrimaryButton></div></form></Modal>
+    <ConfirmActionModal open={Boolean(deleteTarget)} title="To‘lov usulini butunlay o‘chirish" description={deleteTarget ? `“${deleteTarget.name}” usulini o‘chirishni tasdiqlang.` : ""} consequence="Yangi POS va payment amallarida bu usul ko‘rinmaydi. Tarixiy to‘lovlar o‘z usuli bilan saqlanadi." confirmLabel="Butunlay o‘chirish" busy={busy} onClose={() => setDeleteTarget(null)} onConfirm={confirmRemove} />
   </>;
 }
 

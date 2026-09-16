@@ -102,40 +102,40 @@ function EmployeeWorkspacePage({ workspaceKey }) {
 
   const metrics = {
     agent_workspace: [
-      ["Tashrif", countScoped(db.visits, user, isManager), "Bugungi va rejalashtirilgan"],
-      ["Buyurtma", countScoped(db.orders, user, isManager), "Sizga tegishli"],
-      ["Mijoz", db.customers?.length || 0, "Ishlash mumkin"],
-      ["To‘lov", countScoped(db.payments, user, isManager), "Qabul qilingan"],
+      ["Tashrif", countScoped(db.visits, user, isManager), "Bugungi va rejalashtirilgan", "/visits"],
+      ["Buyurtma", countScoped(db.orders, user, isManager), "Sizga tegishli", "/orders"],
+      ["Mijoz", db.customers?.length || 0, "Ishlash mumkin", "/customers"],
+      ["To‘lov", countScoped(db.payments, user, isManager), "Qabul qilingan", "/payments"],
     ],
     warehouse_workspace: [
-      ["Mahsulot", db.products?.length || 0, "Katalog"],
-      ["Qoldiq", db.balances?.length || 0, "Pozitsiya"],
-      ["Kirim", db.goodsReceipts?.length || 0, "Hujjat"],
-      ["Transfer", db.transfers?.length || 0, "Jarayon"],
+      ["Mahsulot", db.products?.length || 0, "Katalog", "/inventory/products"],
+      ["Qoldiq", db.balances?.length || 0, "Pozitsiya", "/inventory"],
+      ["Kirim", db.goodsReceipts?.length || 0, "Hujjat", "/inventory/receipts"],
+      ["Transfer", db.transfers?.length || 0, "Jarayon", "/inventory/transfers"],
     ],
     fulfillment_workspace: [
-      ["Pick list", countScoped(db.pickLists, user, isManager), "Ish navbati"],
-      ["Qadoqlash", db.packing?.length || 0, "Jarayon"],
-      ["Tayyor", (db.pickLists || []).filter((row) => row.status === "READY").length, "Yetkazishga tayyor"],
-      ["Buyurtma", db.orders?.length || 0, "Manba"],
+      ["Pick list", countScoped(db.pickLists, user, isManager), "Ish navbati", "/fulfillment/pick-lists"],
+      ["Qadoqlash", db.packing?.length || 0, "Jarayon", "/fulfillment/packing"],
+      ["Tayyor", (db.pickLists || []).filter((row) => row.status === "READY").length, "Yetkazishga tayyor", "/fulfillment/ready"],
+      ["Buyurtma", db.orders?.length || 0, "Manba", "/orders"],
     ],
     driver_workspace: [
-      ["Topshiriq", countScoped(db.deliveries, user, isManager), "Sizga biriktirilgan"],
-      ["Reys", countScoped(db.deliveryTrips, user, isManager), "Bugungi"],
-      ["Yetkazildi", (db.deliveries || []).filter((row) => row.status === "DELIVERED").length, "Yakunlangan"],
-      ["Muammoli", (db.deliveries || []).filter((row) => ["FAILED", "PARTIALLY_DELIVERED"].includes(row.status)).length, "E’tibor kerak"],
+      ["Topshiriq", countScoped(db.deliveries, user, isManager), "Sizga biriktirilgan", "/deliveries/assignments"],
+      ["Reys", countScoped(db.deliveryTrips, user, isManager), "Bugungi", "/deliveries"],
+      ["Yetkazildi", (db.deliveries || []).filter((row) => row.status === "DELIVERED").length, "Yakunlangan", "/deliveries?status=DELIVERED"],
+      ["Muammoli", (db.deliveries || []).filter((row) => ["FAILED", "PARTIALLY_DELIVERED"].includes(row.status)).length, "E’tibor kerak", "/deliveries?status=FAILED"],
     ],
     sales_operator_workspace: [
-      ["Buyurtma", countScoped(db.orders, user, isManager), "Yaratilgan"],
-      ["Mijoz", db.customers?.length || 0, "Baza"],
-      ["Mahsulot", db.products?.length || 0, "Katalog"],
-      ["Savdo", (db.sales || []).reduce((sum, row) => sum + Number(row.total || 0), 0), "so‘m"],
+      ["Buyurtma", countScoped(db.orders, user, isManager), "Yaratilgan", "/orders"],
+      ["Mijoz", db.customers?.length || 0, "Baza", "/customers"],
+      ["Mahsulot", db.products?.length || 0, "Katalog", "/inventory/products"],
+      ["Savdo", (db.sales || []).reduce((sum, row) => sum + Number(row.total || 0), 0), "so‘m", "/sales"],
     ],
     cashier_workspace: [
-      ["To‘lov", countScoped(db.payments, user, isManager), "Operatsiya"],
-      ["Qarzdor", db.debts?.length || 0, "Mijoz"],
-      ["Invoice", db.invoices?.length || 0, "Hujjat"],
-      ["Tushum", (db.payments || []).reduce((sum, row) => sum + Number(row.amount || 0), 0), "so‘m"],
+      ["To‘lov", countScoped(db.payments, user, isManager), "Operatsiya", "/payments"],
+      ["Qarzdor", db.debts?.length || 0, "Mijoz", "/debt"],
+      ["Invoice", db.invoices?.length || 0, "Hujjat", "/invoices"],
+      ["Tushum", (db.payments || []).reduce((sum, row) => sum + Number(row.amount || 0), 0), "so‘m", "/finance"],
     ],
   }[workspaceKey] || [];
 
@@ -187,7 +187,10 @@ function EmployeeWorkspacePage({ workspaceKey }) {
       </section>
 
       <section className="qp-role-kpis">
-        {metrics.map(([label, value, hint]) => <div key={label}><Icon size={18}/><span>{label}</span><strong>{typeof value === "number" && hint === "so‘m" ? formatMoney(value) : value}</strong><small>{hint}</small></div>)}
+        {metrics.map(([label, value, hint, to]) => {
+          const content = <><Icon size={18}/><span>{label}</span><strong>{typeof value === "number" && hint === "so‘m" ? formatMoney(value) : value}</strong><small>{hint}</small></>;
+          return to ? <Link key={label} to={to} className="qp-role-kpi-link" aria-label={`${label}: ${value}`}>{content}</Link> : <div key={label}>{content}</div>;
+        })}
       </section>
 
       <div className="qp-workspace-quick-grid">

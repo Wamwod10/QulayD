@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
-import { Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
+import { ConfirmActionModal, Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
 import Select from "../../../components/ui/Select";
 import { EMPLOYEE_WORKSPACE_OPTIONS, EMPLOYEE_WORKSPACE_KEYS, suggestedWorkspaceForEmployeeType } from "../../../config/employeeWorkspaces";
 import { useAuth } from "../../../hooks/useAuth";
@@ -48,6 +48,7 @@ function UsersPage() {
   const [passwordEmployee, setPasswordEmployee] = useState(null);
   const [newPassword, setNewPassword] = useState("");
   const [passwordBusy, setPasswordBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const employeeTypes = useMemo(() => (db.employeeTypes || []).filter((item) => item.status !== "INACTIVE"), [db.employeeTypes]);
   const branches = useMemo(() => (Array.isArray(db.branches) ? db.branches : []).filter((branch) => branch.status !== "INACTIVE"), [db.branches]);
@@ -69,7 +70,7 @@ function UsersPage() {
 
   const openCreate = () => {
     const role = employeeTypes[0]?.code || "";
-    const workspace = suggestedWorkspaceForEmployeeType(role);
+    const workspace = suggestedWorkspaceForEmployeeType(role, employeeTypes[0]?.name);
     setEditingEmployee(null);
     setForm({ ...emptyForm, role, branchId: branches[0]?.id || "", moduleAccess: workspace ? [workspace] : [] });
     setOpen(true);
@@ -88,7 +89,8 @@ function UsersPage() {
 
   const chooseEmployeeType = (code) => {
     setForm((current) => {
-      const suggested = suggestedWorkspaceForEmployeeType(code);
+      const employeeType = employeeTypes.find((item) => item.code === code);
+      const suggested = suggestedWorkspaceForEmployeeType(code, employeeType?.name);
       if (!suggested) return { ...current, role: code };
       const currentWorkspaces = current.moduleAccess.filter((key) => EMPLOYEE_WORKSPACE_KEYS.includes(key));
       if (currentWorkspaces.length > 1) return { ...current, role: code };
@@ -123,9 +125,10 @@ function UsersPage() {
     } catch (error) { notify(error.message, "danger"); }
   };
 
-  const removeEmployee = async (row) => {
-    if (!window.confirm(`“${row.name}” xodimini o‘chirasizmi? Tarixiy buyurtma, to‘lov va audit yozuvlari saqlanadi.`)) return;
-    try { await removeEmployeeRecord(row.id); notify("Xodim arxivlandi va uning aktiv sessiyalari yopildi", "warning"); }
+  const removeEmployee = (row) => setDeleteTarget(row);
+  const confirmRemoveEmployee = async () => {
+    if (!deleteTarget) return;
+    try { await removeEmployeeRecord(deleteTarget.id); notify("Xodim arxivlandi va uning aktiv sessiyalari yopildi", "warning"); setDeleteTarget(null); }
     catch (error) { notify(error.message, "danger"); }
   };
 
@@ -230,6 +233,7 @@ function UsersPage() {
         <div className="qp-form-actions"><SecondaryButton type="button" disabled={typeBusy} onClick={()=>setTypeModalOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit" disabled={typeBusy}>{typeBusy ? <><LoaderCircle className="qp-spin" size={15}/> Saqlanmoqda...</> : editingType ? "Yangilash" : "Qo‘shish"}</PrimaryButton></div>
       </form>
     </Modal>
+    <ConfirmActionModal open={Boolean(deleteTarget)} title="Xodimni arxivlash" description={deleteTarget ? `“${deleteTarget.name}” xodim hisobini arxivlashni tasdiqlang.` : ""} consequence="Xodim tizimga kira olmaydi va aktiv sessiyalari yopiladi. Tarixiy buyurtma, to‘lov va audit yozuvlari saqlanadi." confirmLabel="Arxivlash" tone="warning" onClose={() => setDeleteTarget(null)} onConfirm={confirmRemoveEmployee} />
   </>;
 }
 export default UsersPage;

@@ -139,12 +139,14 @@ export function normalizeRemoteData(remote = {}) {
   mapped.settings = remote.settingsRecord?.data || {};
   mapped.products = (remote.products || []).map((item) => {
     const currentPrices = [...(item.prices || [])].sort((a, b) => Number(Boolean(b.priceList?.isDefault)) - Number(Boolean(a.priceList?.isDefault)));
-    const primaryPrice = currentPrices.find((entry) => entry.priceList?.isDefault) || currentPrices[0];
+    const primaryPrice = currentPrices.find((entry) => entry.priceListId === item.primaryPriceListId)
+      || currentPrices.find((entry) => entry.priceList?.isDefault) || currentPrices[0];
     return {
       ...relationDisplayFields(item, RELATION_KEYS),
       barcode: item.barcodes?.find((code) => code.isPrimary)?.barcode || item.barcodes?.[0]?.barcode || "",
       barcodes: item.barcodes?.map((code) => code.barcode) || [],
       image: resolveMediaUrl(item.imageUrl || item.images?.find((image) => image.isPrimary)?.url || item.images?.[0]?.url || ""),
+      images: (item.images || []).map((image) => ({ ...image, url: resolveMediaUrl(image.url) })),
       price: Number(primaryPrice?.price || 0),
       prices: currentPrices,
       stocks: (item.stocks || []).map((stock) => ({ ...stock, onHand: Number(stock.onHand || 0), reserved: Number(stock.reserved || 0) })),
@@ -332,7 +334,12 @@ function subscribeLocalDb(listener) {
 export function useLocalDb(selector = (db) => db) {
   const db = useSyncExternalStore(subscribeLocalDb, getSnapshot, getSnapshot);
   const hasToken = typeof window !== "undefined" && Boolean(window.localStorage.getItem(STORAGE_KEYS.accessToken));
-  const { data, error, refetch } = useBootstrapQuery(undefined, { skip: !hasToken, pollingInterval: 60_000 });
+  const { data, error, refetch } = useBootstrapQuery(undefined, {
+    skip: !hasToken,
+    pollingInterval: 0,
+    refetchOnFocus: true,
+    refetchOnReconnect: true,
+  });
   useEffect(() => { if (data) setRemoteData(data); }, [data]);
   useEffect(() => {
     if (!error) return;

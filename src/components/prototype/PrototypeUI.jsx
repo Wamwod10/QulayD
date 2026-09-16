@@ -77,6 +77,18 @@ export function Modal({ open, title, description = "", onClose, children, wide =
   );
 }
 
+export function ConfirmActionModal({ open, title, description, consequence, confirmLabel = "Tasdiqlash", tone = "danger", busy = false, onConfirm, onClose }) {
+  return (
+    <Modal open={open} title={title} description={description} onClose={() => { if (!busy) onClose?.(); }} className={`qp-confirm-modal qp-confirm-${tone}`}>
+      {consequence ? <div className="qp-confirm-consequence"><strong>Oqibati</strong><span>{consequence}</span></div> : null}
+      <div className="qp-form-actions">
+        <SecondaryButton type="button" disabled={busy} onClick={onClose}>Bekor qilish</SecondaryButton>
+        <button type="button" className={`qp-button ${tone === "danger" ? "qp-button-danger" : "qp-button-primary"}`} disabled={busy} onClick={onConfirm}>{busy ? "Bajarilmoqda..." : confirmLabel}</button>
+      </div>
+    </Modal>
+  );
+}
+
 export function Drawer({ open, title, description = "", onClose, children, actions = null }) {
   useOverlayLifecycle(open, onClose);
   if (!open) return null;

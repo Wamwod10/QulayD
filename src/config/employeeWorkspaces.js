@@ -68,7 +68,8 @@ export function isEmployeeWorkspace(key) {
   return EMPLOYEE_WORKSPACE_KEYS.includes(key);
 }
 
-export function suggestedWorkspaceForEmployeeType(code = "") {
-  const normalized = String(code).trim().toUpperCase();
-  return EMPLOYEE_WORKSPACE_OPTIONS.find(([, item]) => item.suggestedEmployeeTypes.includes(normalized))?.[0] || "";
+export function suggestedWorkspaceForEmployeeType(code = "", name = "") {
+  const normalized = `${code} ${name}`.trim().toUpperCase();
+  if (["YETKAZIB BERUVCHI", "HAYDOVCHI", "KURYER"].some((value) => normalized.includes(value))) return "driver_workspace";
+  return EMPLOYEE_WORKSPACE_OPTIONS.find(([, item]) => item.suggestedEmployeeTypes.some((type) => normalized.split(/\s+/).includes(type)))?.[0] || "";
 }

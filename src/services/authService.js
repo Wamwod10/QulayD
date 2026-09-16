@@ -81,6 +81,11 @@ function requestKey({ url, method, body, params }) {
 
 export async function apiRequest({ url, method = "POST", body, params }) {
   const verb = String(method || "POST").toUpperCase();
+  if (verb !== "GET" && typeof navigator !== "undefined" && navigator.onLine === false) {
+    const error = new Error("Internet yo‘q. Bu amal saqlanmadi; ulanish tiklangach qayta urinib ko‘ring.");
+    error.status = 0;
+    throw error;
+  }
   if (verb === "GET") return run(baseApi.endpoints.request, { url, method: verb, body, params }, "Amalni bajarib bo‘lmadi.");
   const key = requestKey({ url, method: verb, body, params });
   if (inFlightMutations.has(key)) return inFlightMutations.get(key);

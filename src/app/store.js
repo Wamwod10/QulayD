@@ -1,4 +1,5 @@
 import { configureStore } from "@reduxjs/toolkit";
+import { setupListeners } from "@reduxjs/toolkit/query";
 import { baseApi } from "../services/baseApi";
 
 export const store = configureStore({
@@ -12,5 +13,7 @@ export const store = configureStore({
 
   devTools: import.meta.env.DEV,
 });
+
+setupListeners(store.dispatch);
 
 export default store;

@@ -49,7 +49,7 @@ export const navigationConfig = [
     icon: "partners",
     children: [
       { label: "Mijozlar", description: "Mijozlar va savdo nuqtalari", to: "/customers" },
-      { label: "Yetkazib beruvchilar", description: "Mahsulot yetkazib beruvchilar", to: "/suppliers" },
+      { label: "Ta’minotchilar", description: "Tashqi mahsulot ta’minotchilari", to: "/suppliers" },
       { label: "Kontaktlar", description: "Hamkorlarning aloqa shaxslari", to: "/partners/contacts" },
     ],
   },

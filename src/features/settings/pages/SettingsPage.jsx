@@ -626,7 +626,6 @@ function SettingsContent({ section, db }) {
   const configs = {
     inventory: [
       ["allowNegativeStock", "Manfiy qoldiq", "Qoldiq yetarli bo‘lmasa ham operatsiyaga ruxsat"],
-      ["reservations", "Mahsulotni band qilish", "Tasdiqlangan buyurtmalar uchun mahsulot miqdorini band qiladi"],
       ["lowStockAlerts", "Kam qoldiq ogohlantirishi", "Minimal qoldiqdan past bo‘lganda signal"],
       ["requireTransferApproval", "Ko‘chirish tasdig‘i", "Ko‘chirish avval tasdiq kutadi"],
       ["requireAdjustmentApproval", "Qoldiq tuzatish tasdig‘i", "Qoldiq tuzatish avval tasdiq kutadi"],
@@ -658,7 +657,7 @@ function SettingsContent({ section, db }) {
       ["sound", "Ovozli signal", "Tezkor bildirishnomalar uchun ovoz"],
     ],
   };
-  return <ToggleList section={section} items={configs[section] || []} db={db} />;
+  return <ToggleList section={section} items={configs[section] || []} db={db}>{section === "inventory" ? <SettingRow title="Mahsulotni band qilish" description="Tasdiqlangan buyurtma → tayyorlash → yetkazish zanjiri uchun majburiy. O‘chirib bo‘lmaydi."><strong>Doimo yoqilgan</strong></SettingRow> : null}</ToggleList>;
 }
 
 function SettingsPage({ section = "general" }) {

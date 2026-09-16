@@ -1,22 +1,31 @@
 import Select from "../../../components/ui/Select";
-import { ArrowRight, CheckCircle2, Plus } from "lucide-react";
+import { ArrowRight, CheckCircle2, PackageCheck, Plus, Send, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
 import { Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
+import { useAuth } from "../../../hooks/useAuth";
 import { useLocalDb } from "../../../services/localDb";
 import { notify } from "../../../services/notify";
-import { approveTransfer, createTransfer } from "../../../services/prototypeActions";
+import { approveTransfer, cancelTransfer, createTransfer, dispatchTransfer, receiveTransfer } from "../../../services/prototypeActions";
 import { getName } from "../../../utils/formatters";
 
 const blankTracking = { productId: "", variantId: "", packageId: "", batchId: "", quantity: "", serialIds: [] };
 
 function InventoryTransfersPage() {
   const db = useLocalDb();
+  const { user } = useAuth();
+  const roles = user?.roles || [];
+  const permissions = user?.permissions || [];
+  const privileged = roles.includes("OWNER") || roles.includes("ADMIN");
+  const canApprove = privileged || permissions.includes("inventory.approve");
+  const canUpdate = privileged || permissions.includes("inventory.update") || (user?.modules || []).includes("warehouse_workspace");
   const [open, setOpen] = useState(false);
+  const sourceWarehouses = privileged || !user?.warehouseId ? db.warehouses : db.warehouses.filter((item) => item.id === user.warehouseId);
+  const initialSourceWarehouseId = sourceWarehouses[0]?.id || db.warehouses[0]?.id || "";
   const [form, setForm] = useState({
-    fromWarehouseId: db.warehouses[0]?.id || "",
-    toWarehouseId: db.warehouses[1]?.id || db.warehouses[0]?.id || "",
+    fromWarehouseId: initialSourceWarehouseId,
+    toWarehouseId: db.warehouses.find((item) => item.id !== initialSourceWarehouseId)?.id || initialSourceWarehouseId,
     ...blankTracking,
   });
 
@@ -61,9 +70,27 @@ function InventoryTransfersPage() {
     if (result.ok) { setOpen(false); setForm((current) => ({ ...current, ...blankTracking })); }
   };
 
-  const approve = async (id) => {
-    const result = await approveTransfer(id);
+  const runTransferAction = async (action, id) => {
+    const result = await action(id);
     notify(result.message, result.ok ? "success" : "danger");
+  };
+
+  const renderActions = (row) => {
+    const sourceAllowed = privileged || !user?.warehouseId || user.warehouseId === row.fromWarehouseId;
+    const targetAllowed = privileged || !user?.warehouseId || user.warehouseId === row.toWarehouseId;
+    if (["PENDING", "PENDING_APPROVAL"].includes(row.status)) return <div className="qp-inline-actions">
+      {canApprove ? <PrimaryButton onClick={() => runTransferAction(approveTransfer, row.id)}><CheckCircle2 size={14} /> Tasdiqlash</PrimaryButton> : null}
+      {canUpdate && sourceAllowed ? <SecondaryButton onClick={() => runTransferAction(cancelTransfer, row.id)}><XCircle size={14} /> Bekor qilish</SecondaryButton> : null}
+      {!canApprove && !(canUpdate && sourceAllowed) ? <span className="qp-muted">Tasdiq kutilmoqda</span> : null}
+    </div>;
+    if (row.status === "APPROVED") return canUpdate && sourceAllowed
+      ? <PrimaryButton onClick={() => runTransferAction(dispatchTransfer, row.id)}><Send size={14} /> Jo‘natish</PrimaryButton>
+      : <span className="qp-muted">Manba ombor jo‘natadi</span>;
+    if (row.status === "IN_PROGRESS") return canUpdate && targetAllowed
+      ? <PrimaryButton onClick={() => runTransferAction(receiveTransfer, row.id)}><PackageCheck size={14} /> Qabul qilish</PrimaryButton>
+      : <span className="qp-muted">Yo‘lda</span>;
+    if (row.status === "CANCELLED") return <span className="qp-muted">Bekor qilingan</span>;
+    return <span className="qp-muted">Yakunlangan</span>;
   };
 
   return <>
@@ -78,18 +105,17 @@ function InventoryTransfersPage() {
         { key: "number", label: "Hujjat", render: (row) => <strong>{row.number}</strong> },
         { key: "product", label: "Mahsulot" }, { key: "from", label: "Manba" },
         { key: "arrow", label: "", sortable: false, render: () => <ArrowRight size={15} /> },
-        { key: "to", label: "Qabul qiluvchi" }, { key: "quantity", label: "Miqdor" },
+        { key: "to", label: "Qabul qiluvchi" },
+        { key: "quantity", label: "Miqdor", render: (row) => <span>{Number(row.quantity || 0)}{Number(row.conversionToBase || 1) !== 1 ? ` · ${Number(row.baseQuantity || 0)} base` : ""}</span> },
         { key: "status", label: "Holat", render: (row) => <StatusPill status={row.status} /> },
-        { key: "actions", label: "Amal", sortable: false, render: (row) => ["PENDING", "PENDING_APPROVAL"].includes(row.status)
-          ? <PrimaryButton onClick={() => approve(row.id)}><CheckCircle2 size={14} /> Tasdiqlash</PrimaryButton>
-          : <span className="qp-muted">Yakunlangan</span> },
+        { key: "actions", label: "Amal", sortable: false, render: renderActions },
       ]}
     />
 
     <Modal open={open} title="Yangi ko‘chirish" description="Tracked mahsulotlarda variant, lot va serial tanlovi qoldiq bilan birga ko‘chiriladi." onClose={() => setOpen(false)}>
       <form onSubmit={submit}>
         <div className="qp-form-grid">
-          <Field label="Qayerdan"><Select value={form.fromWarehouseId} onChange={(event) => patchForm({ fromWarehouseId: event.target.value, batchId: "", serialIds: [] })}>{db.warehouses.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></Field>
+          <Field label="Qayerdan"><Select value={form.fromWarehouseId} onChange={(event) => patchForm({ fromWarehouseId: event.target.value, batchId: "", serialIds: [] })} disabled={!privileged && Boolean(user?.warehouseId)}>{sourceWarehouses.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></Field>
           <Field label="Qayerga"><Select value={form.toWarehouseId} onChange={(event) => patchForm({ toWarehouseId: event.target.value })}>{db.warehouses.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></Field>
           <Field label="Mahsulot"><Select value={form.productId} onChange={(event) => changeProduct(event.target.value)}><option value="">Tanlang</option>{db.products.filter((item) => item.status === "ACTIVE").map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</Select></Field>
           {variants.length ? <Field label="Variant"><Select value={form.variantId} onChange={(event) => changeVariant(event.target.value)}><option value="">Tanlang</option>{variants.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field> : null}

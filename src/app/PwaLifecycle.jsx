@@ -44,7 +44,7 @@ function PwaLifecycle() {
 
   useEffect(() => {
     if (!offlineReady) return;
-    notify("Qulay offline ishlashga tayyor", "success");
+    notify("Qulay ilova qobig‘i offline ochishga tayyor. Business amallar uchun internet kerak.", "success");
     setOfflineReady(false);
   }, [offlineReady, setOfflineReady]);
 

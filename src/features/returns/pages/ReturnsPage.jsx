@@ -165,14 +165,10 @@ function ReturnsPage() {
   const submitRefund = async (event) => {
     event.preventDefault();
     if (!refundRow || !selectedRefundOption) return;
-    if (selectedRefundOption.method === "CASH" && refundSettlement.payoutAmount > 0) {
-      if (!currentShift) return notify("Naqd qaytarish uchun sizning ochiq kassa smenangiz kerak", "warning");
-      if (numberValue(currentShift.expectedCash) + 1e-9 < refundSettlement.payoutAmount) return notify("Kassada qaytarish uchun yetarli naqd mablag‘ yo‘q", "warning");
-    }
     try {
       await apiRequest({ url: `/returns/${refundRow.id}/refund`, body: {
-        method: selectedRefundOption.method,
-        ...(selectedRefundOption.method === "CASH" && refundSettlement.payoutAmount > 0 ? { shiftId: currentShift.id } : {}),
+        method: selectedRefundOption.method, methodCode: selectedRefundOption.code,
+        ...(currentShift?.id ? { shiftId: currentShift.id } : {}),
         ...(refundNote.trim() ? { note: refundNote.trim() } : {}),
       } });
       notify(refundSettlement.creditOffset > 0 ? `Qaytarish yopildi: ${formatMoney(refundSettlement.creditOffset)} qarzdan kamaytirildi${refundSettlement.payoutAmount > 0 ? `, ${formatMoney(refundSettlement.payoutAmount)} qaytarildi` : ""}` : "Pul qaytarildi va moliya yozuvlari yaratildi");

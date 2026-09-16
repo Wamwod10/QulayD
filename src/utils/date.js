@@ -27,3 +27,20 @@ export function minutesBetween(start, end = new Date()) {
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return 0;
   return Math.max(0, Math.round((to.getTime() - from.getTime()) / 60000));
 }
+
+export function dateKeyForTimeZone(value = new Date(), timeZone = "Asia/Tashkent") {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+  } catch {
+    return date.toISOString().slice(0, 10);
+  }
+}

@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { collectProductBarcodes, createProductIdentity, findProductByScan, findProductSelectionByScan, generateUniqueSku, getProductBarcodes } from "./productCodes";
 
 describe("product identity", () => {
-  it("creates a unique five-digit SKU and an empty first barcode", () => {
+  it("creates a unique SKU and an empty first barcode", () => {
     const products = [{ id: "old", sku: "SKU-123456", barcode: "111", barcodes: ["111", "222"] }];
     const identity = createProductIdentity(products);
-    expect(identity.sku).toMatch(/^\d{5}$/);
+    expect(identity.sku).toMatch(/^[A-Za-z0-9._\/-]{1,64}$/);
     expect(identity.sku).not.toBe(products[0].sku);
     expect(identity.barcodes).toEqual([""]);
   });
@@ -18,7 +18,7 @@ describe("product identity", () => {
     expect(findProductByScan(products, "SKU-123456")?.id).toBe("p1");
   });
 
-  it("never returns an existing product or variant five-digit SKU", () => {
+  it("never returns an existing product or variant SKU", () => {
     const products = Array.from({ length: 20 }, (_, index) => ({ id: String(index), sku: String(index).padStart(5, "0") }));
     products[0].variants = [{ sku: "99999" }];
     const generated = generateUniqueSku(products);

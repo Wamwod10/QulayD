@@ -5,16 +5,17 @@ import NavigationAppModal from "../../../components/maps/NavigationAppModal";
 import YandexMap from "../../../components/maps/YandexMap";
 import { PageShell, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
 import { useLocalDb } from "../../../services/localDb";
+import { dateKeyForTimeZone } from "../../../utils/date";
 import { getName } from "../../../utils/formatters";
 
 function RoutesMapPage() {
   const db = useLocalDb();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dateKeyForTimeZone(new Date(), db.settings?.company?.timezone || "Asia/Tashkent");
   const plans = useMemo(() => db.routePlans.filter((plan) => plan.date === today || !plan.date), [db.routePlans, today]);
-  const [selectedPlanId, setSelectedPlanId] = useState(plans[0]?.id || db.routePlans[0]?.id || null);
+  const [selectedPlanId, setSelectedPlanId] = useState(plans[0]?.id || null);
   const [selectedStopIndex, setSelectedStopIndex] = useState(0);
   const [navigationTarget, setNavigationTarget] = useState(null);
-  const selectedPlan = db.routePlans.find((plan) => plan.id === selectedPlanId) || plans[0] || db.routePlans[0];
+  const selectedPlan = plans.find((plan) => plan.id === selectedPlanId) || plans[0] || null;
   const agent = db.agents.find((item) => item.id === selectedPlan?.agentId);
   const warehouse = db.warehouses.find((item) => item.id === (selectedPlan?.warehouseId || db.settings.company.defaultWarehouseId)) || db.warehouses[0];
 
@@ -51,7 +52,7 @@ function RoutesMapPage() {
         <div><span>Tanlangan marshrut</span><strong>{progress}%</strong><small>{completed}/{stops.length} stop bajarildi</small></div>
       </div>
 
-      <div className="qp-route-selector">{(plans.length ? plans : db.routePlans).map((plan) => <button key={plan.id} type="button" className={plan.id === selectedPlan?.id ? "active" : ""} onClick={() => { setSelectedPlanId(plan.id); setSelectedStopIndex(0); }}><Route size={15} /><span><strong>{plan.name || plan.number || "Marshrut"}</strong><small>{getName(db.agents, plan.agentId)}</small></span><StatusPill status={plan.status} /></button>)}</div>
+      <div className="qp-route-selector">{plans.map((plan) => <button key={plan.id} type="button" className={plan.id === selectedPlan?.id ? "active" : ""} onClick={() => { setSelectedPlanId(plan.id); setSelectedStopIndex(0); }}><Route size={15} /><span><strong>{plan.name || plan.number || "Marshrut"}</strong><small>{getName(db.agents, plan.agentId)}</small></span><StatusPill status={plan.status} /></button>)}</div>
 
       <div className="qp-map-workspace qp-route-workspace">
         <div className="qp-map-workspace-map"><YandexMap points={routePoints} routePoints={routePoints} selectedId={selectedStop?.id} onPointClick={(point) => {

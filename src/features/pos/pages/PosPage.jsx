@@ -692,15 +692,11 @@ function PosPage() {
   const submitPosRefund = async (event) => {
     event.preventDefault();
     if (!returnRefundRow || !selectedReturnRefundOption || returnBusy) return;
-    if (selectedReturnRefundOption.method === "CASH" && returnRefundSettlement.payoutAmount > 0) {
-      if (!currentShift) return notify("Naqd qaytarish uchun ochiq kassa smenasi kerak", "warning");
-      if (numeric(currentShift.expectedCash) + 1e-9 < returnRefundSettlement.payoutAmount) return notify("Kassada qaytarish uchun yetarli naqd mablag‘ yo‘q", "warning");
-    }
     setReturnBusy(true);
     try {
       await apiRequest({ url: `/returns/${returnRefundRow.id}/refund`, body: {
-        method: selectedReturnRefundOption.method,
-        ...(selectedReturnRefundOption.method === "CASH" && returnRefundSettlement.payoutAmount > 0 ? { shiftId: currentShift.id } : {}),
+        method: selectedReturnRefundOption.method, methodCode: selectedReturnRefundOption.code,
+        ...(currentShift?.id ? { shiftId: currentShift.id } : {}),
         ...(returnRefundNote.trim() ? { note: returnRefundNote.trim() } : {}),
       } });
       notify(returnRefundSettlement.creditOffset > 0 ? `Qaytarish yopildi: ${formatMoney(returnRefundSettlement.creditOffset)} qarzdan kamaytirildi${returnRefundSettlement.payoutAmount > 0 ? `, ${formatMoney(returnRefundSettlement.payoutAmount)} qaytarildi` : ""}` : "Pul qaytarildi", "success");

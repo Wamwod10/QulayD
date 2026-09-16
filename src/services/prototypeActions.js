@@ -50,7 +50,6 @@ export async function createOrder(payload) {
 export const sendOrderToPreparation = (id) => perform({ url: `/orders/${id}/confirm`, body: {} }, "Buyurtma tasdiqlandi");
 export const approveOrderRequest = sendOrderToPreparation;
 export const rejectOrderRequest = (id, reason = "Owner tomonidan rad etildi") => perform({ url: `/orders/${id}/cancel`, body: { note: reason } }, "Buyurtma bekor qilindi");
-export const markOrderReadyForDelivery = (id) => perform({ url: `/orders/${id}/ready`, body: {} }, "Buyurtma yetkazishga tayyor");
 
 export async function completePosSale({ cart, customerId, warehouseId, shiftId, priceListId, paymentMethod, total, generalDiscount, dueAt }) {
   const items = cart.map((item) => ({ productId: item.productId, variantId: item.variantId || null, packageId: item.packageId || null,
@@ -81,10 +80,10 @@ export const createTransfer = (payload) => perform({ url: "/inventory/transfers"
   targetWarehouseId: payload.targetWarehouseId || payload.toWarehouseId, note: payload.note || undefined,
   items: payload.items || [{ productId: payload.productId, variantId: payload.variantId || null, packageId: payload.packageId || null, batchId: payload.batchId || null,
     quantity: Number(payload.quantity), serialIds: payload.serialIds || [] }] } }, "Ko‘chirish yaratildi");
-export async function approveTransfer(id) {
-  const approved = await perform({ url: `/inventory/transfers/${id}/approve`, body: {} }, "Ko‘chirish tasdiqlandi");
-  return approved.ok ? perform({ url: `/inventory/transfers/${id}/complete`, body: {} }, "Ko‘chirish yakunlandi") : approved;
-}
+export const approveTransfer = (id) => perform({ url: `/inventory/transfers/${id}/approve`, body: {} }, "Ko‘chirish tasdiqlandi");
+export const dispatchTransfer = (id) => perform({ url: `/inventory/transfers/${id}/dispatch`, body: {} }, "Ko‘chirish jo‘natildi");
+export const receiveTransfer = (id) => perform({ url: `/inventory/transfers/${id}/receive`, body: {} }, "Ko‘chirish qabul qilindi");
+export const cancelTransfer = (id) => perform({ url: `/inventory/transfers/${id}/cancel`, body: {} }, "Ko‘chirish bekor qilindi");
 
 function proofPayload(proof = {}) { return { recipientName: proof.recipientName || undefined, latitude: proof.latitude == null ? undefined : Number(proof.latitude), longitude: proof.longitude == null ? undefined : Number(proof.longitude),
   photoUrl: proof.photoUrl || proof.photo || undefined, note: proof.note || undefined }; }
@@ -92,12 +91,16 @@ export const arriveDelivery = (id, location = {}) => perform({ url: `/delivery/d
 export const completeDelivery = (id, proof = {}) => perform({ url: `/delivery/deliveries/${id}/complete`, body: proofPayload(proof) }, "Yetkazib berish yakunlandi");
 export const completePartialDelivery = (id, deliveredItems = [], proof = {}) => perform({ url: `/delivery/deliveries/${id}/partial`, body: {
   ...proofPayload(proof), deliveredItems: deliveredItems.map((item) => ({ orderItemId: item.orderItemId || item.id, quantity: Number(item.quantity) })) } }, "Qisman yetkazildi");
+export const collectDeliveryPayment = (id, payload = {}) => perform({ url: `/delivery/deliveries/${id}/collect-payment`, body: {
+  shiftId: payload.shiftId || null, methodCode: payload.methodCode || payload.method || "CASH", amount: Number(payload.amount),
+  externalRef: payload.externalRef || undefined, note: payload.note || undefined } }, "To‘lov qabul qilindi");
 export const failDelivery = (id, reason = "Yetkazib berilmadi") => perform({ url: `/delivery/deliveries/${id}/fail`, body: { reason } }, "Yetkazish muvaffaqiyatsiz yakunlandi");
 
 export const createManualInvoice = (payload) => perform({ url: "/invoices", body: { customerId: payload.customerId || null, orderId: payload.orderId || null,
   dueAt: payload.dueAt || undefined, items: (payload.items || []).map((item) => ({ description: item.description || "Mahsulot", productId: item.productId || null,
     quantity: Number(item.quantity), unitPrice: Number(item.unitPrice ?? item.price), tax: Number(item.tax || 0) })) } }, "Hisob-faktura yaratildi");
 export const collectPayment = (payload) => perform({ url: "/payments", body: { customerId: payload.customerId || null, supplierId: payload.supplierId || null,
-  orderId: payload.orderId || null, method: payload.method || "CASH", amount: Number(payload.amount), note: payload.note || undefined,
+  orderId: payload.orderId || null, shiftId: payload.shiftId || null, methodCode: payload.methodCode || payload.method || "CASH", amount: Number(payload.amount), note: payload.note || undefined,
   allocations: payload.invoiceId ? [{ invoiceId: payload.invoiceId, amount: Number(payload.amount) }] : undefined } }, "To‘lov yaratildi");
 export const approvePayment = (id) => perform({ url: `/payments/${id}/confirm`, body: {} }, "To‘lov tasdiqlandi");
+export const settlePaymentCash = (id, shiftId) => perform({ url: `/payments/${id}/settle-cash`, body: { shiftId } }, "Naqd pul kassaga qabul qilindi");

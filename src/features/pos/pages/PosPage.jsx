@@ -1,10 +1,10 @@
-import { Archive, ArrowLeftRight, Banknote, Bell, Boxes, Camera, Check, ChevronDown, Clock3, CreditCard, Expand, History, Landmark, LayoutGrid, List, LoaderCircle, LogOut, Minus, Package, PackageCheck, Plus, QrCode, ReceiptText, RotateCcw, ScanBarcode, Settings, ShoppingCart, Store, Trash2, UserPlus, Users, WalletCards, Warehouse, Wifi, X } from "lucide-react";
+import { Archive, ArrowLeftRight, Banknote, Bell, Camera, Check, ChevronDown, CreditCard, Expand, History, Landmark, LayoutGrid, List, LoaderCircle, LogOut, Minus, Package, PackageCheck, Plus, QrCode, ReceiptText, RotateCcw, ScanBarcode, ShoppingCart, Store, Trash2, UserPlus, Users, WalletCards, Wifi, WifiOff, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import CameraScannerModal from "../../../components/mobile/CameraScannerModal";
 import MobilePinGate from "../../../components/mobile/MobilePinGate";
-import { Field, Modal, PrimaryButton, SecondaryButton } from "../../../components/prototype/PrototypeUI";
+import { ConfirmActionModal, Field, Modal, PrimaryButton, SecondaryButton } from "../../../components/prototype/PrototypeUI";
 import Select from "../../../components/ui/Select";
 import { useAuth } from "../../../hooks/useAuth";
 import { usePermissions } from "../../../hooks/usePermissions";
@@ -176,7 +176,8 @@ function PosPage() {
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [categoryName, setCategoryName] = useState("");
   const [categoryProductIds, setCategoryProductIds] = useState([]);
-  const [now, setNow] = useState(new Date());
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
+  const [pendingBranchId, setPendingBranchId] = useState("");
   const [selector, setSelector] = useState(null);
   const [selectedVariantId, setSelectedVariantId] = useState("");
   const [selectedPackageId, setSelectedPackageId] = useState("");
@@ -515,8 +516,13 @@ function PosPage() {
 
   useEffect(() => {
     searchRef.current?.focus();
-    const timer = window.setInterval(() => setNow(new Date()), 30000);
-    return () => window.clearInterval(timer);
+    const updateConnection = () => setOnline(navigator.onLine);
+    window.addEventListener("online", updateConnection);
+    window.addEventListener("offline", updateConnection);
+    return () => {
+      window.removeEventListener("online", updateConnection);
+      window.removeEventListener("offline", updateConnection);
+    };
   }, []);
 
   useEffect(() => {
@@ -583,12 +589,15 @@ function PosPage() {
     finally { setShiftBusy(false); }
   };
 
-  const changeBranch = (branchId) => {
+  const changeBranch = (branchId, confirmed = false) => {
     const branch = activeBranches.find((item) => item.id === branchId);
     if (!branch) return;
     const shiftBranchId = currentShiftCashbox?.branchId || "";
     if (currentShift && shiftBranchId && shiftBranchId !== branch.id) { notify("Ochiq smena vaqtida boshqa filialga o‘tib bo‘lmaydi. Avval smenani yoping.", "warning"); return; }
-    if (cart.length && !window.confirm("Filialni almashtirsangiz joriy savat tozalanadi. Davom etasizmi?")) return;
+    if (cart.length && !confirmed) {
+      setPendingBranchId(branch.id);
+      return;
+    }
     setSelectedBranchId(branch.id);
     if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEYS.selectedBranchId, branch.id);
     updateLocalDb((draft) => {
@@ -731,7 +740,7 @@ function PosPage() {
             <div className="qp-pos-pro-title"><ShoppingCart size={22}/><div><strong>Kassa</strong><span className={currentShift ? "online" : "offline"}><i/>{currentShift ? "Online" : "Smena yopiq"}</span></div></div>
             <div className="qp-pos-pro-context">
               <button type="button" className="qp-pos-context-button" onClick={() => setBranchOpen(true)}><Store size={17}/><span>{selectedBranch?.name || db.settings.company.branch || "Filial"}</span><ChevronDown size={14}/></button>
-              <span className="qp-pos-signal"><Wifi size={18}/></span>
+              <span className={`qp-pos-signal ${online ? "online" : "offline"}`} title={online ? "Internet mavjud" : "Internet yo‘q — amallar saqlanmaydi"}>{online ? <Wifi size={18}/> : <WifiOff size={18}/>}</span>
               <button type="button" className={`qp-pos-shift-chip ${currentShift ? "open" : "closed"}`} onClick={() => openShiftManager(currentShift ? "CASH" : "OPEN")}><Banknote size={16}/><span>{currentShift ? "Smena" : "Smenani ochish"}</span></button>
               <button type="button" className="qp-pos-icon-top" aria-label="Bildirishnomalar" onClick={() => setQuickPanel("notifications")}><Bell size={18}/><i>{posNotifications.filter((item) => !item.read && !item.readAt).length || ""}</i></button>
               {db.settings.mobile?.cameraScanner !== false ? <button type="button" className="qp-pos-icon-top" title="Kamera bilan skanerlash" onClick={() => setScannerOpen(true)}><Camera size={18}/></button> : null}
@@ -740,6 +749,7 @@ function PosPage() {
               <button type="button" className="qp-pos-icon-top" title="Kassadan chiqish" onClick={() => exitPosWorkspace(navigate)}><LogOut size={18}/></button>
             </div>
           </header>
+          {!online ? <div className="qp-pos-offline-banner" role="alert"><WifiOff size={16}/><span>Internet yo‘q. Savdo va boshqa biznes amallari saqlanmaydi; ulanish tiklanguncha ular bloklangan.</span></div> : null}
 
           <div className="qp-pos-check-strip">
             <button type="button" className="qp-pos-check-summary" onClick={() => setShowHeld((value) => !value)}><ReceiptText size={16}/><span>Ochiq chek</span><b>{(db.heldCarts || []).length + 1}</b></button>
@@ -767,7 +777,7 @@ function PosPage() {
 
               <div className="qp-pos-products-toolbar">
                 <div className="qp-category-tabs qp-pos-category-tabs qp-pos-category-tabs-pro">
-                  <button type="button" className={categoryId === "ALL" ? "active" : ""} onClick={() => setCategoryId("ALL")}><LayoutGrid size={15}/> Barchasi</button>
+                  <button type="button" className={categoryId === "ALL" ? "active" : ""} onClick={() => setCategoryId("ALL")}><LayoutGrid size={15}/><span>Barchasi</span></button>
                   {db.categories.filter((category) => category.status !== "INACTIVE").map((category) => <button key={category.id} type="button" className={categoryId === category.id ? "active" : ""} onClick={() => setCategoryId(category.id)}>{category.name}</button>)}
                   <button type="button" className="qp-pos-new-category" onClick={openCategoryCreate}><Plus size={16}/> Kategoriya</button>
                 </div>
@@ -787,7 +797,7 @@ function PosPage() {
 
             <aside className={`qp-pos-checkout-panel qp-pos-checkout-pro ${mobileView === "cart" ? "is-mobile-active" : ""}`}>
               <div className="qp-pos-customer-pro">
-                <div className="qp-pos-customer-head"><div><Users size={18}/><strong>Mijoz tanlash</strong></div><button type="button" className="qp-pos-add-customer" title="Yangi mijoz" onClick={() => setCustomerOpen(true)}><Plus size={18}/></button></div>
+                <div className="qp-pos-customer-head"><div><Users size={18}/><strong>Mijoz tanlash</strong></div><button type="button" className="qp-pos-add-customer" title="Yangi mijoz" onClick={() => setCustomerOpen(true)}><UserPlus size={16}/><span>Yangi mijoz</span></button></div>
                 <div className="qp-pos-customer-select"><Users size={17}/><Select data-pos-customer value={customerId} onChange={(event) => selectCustomer(event.target.value)}>{db.settings.pos.allowAnonymousCustomer !== false ? <option value="">Anonim mijoz</option> : <option value="">Mijozni tanlang</option>}{db.customers.map((customer) => <option value={customer.id} key={customer.id}>{customer.name}{customer.phone ? ` · ${customer.phone}` : ""}</option>)}</Select></div>
                 {selectedCustomer ? <div className="qp-pos-customer-meta"><span>Joriy qarz <strong>{formatMoney(selectedCustomer.debt || 0)}</strong></span><span>Kredit limiti <strong>{formatMoney(selectedCustomer.creditLimit || 0)}</strong></span></div> : null}
               </div>
@@ -807,7 +817,7 @@ function PosPage() {
                 {selectedPaymentType === "CASH" ? <div className="qp-pos-cash-section qp-pos-cash-pro"><div className="qp-pos-cash-grid"><label className="qp-field"><span>Qabul qilindi</span><div className="qp-money-input"><input className="qp-input" inputMode="numeric" value={cashReceived} onChange={(event) => setCashReceived(event.target.value.replace(/[^0-9.]/g, ""))} placeholder={String(total || 0)}/><b>UZS</b></div></label><div className="qp-pos-change"><span>Qaytim</span><strong>{formatMoney(change)}</strong></div></div>{quickCashValues.length ? <div className="qp-pos-quick-cash">{quickCashValues.map((value) => <button key={value} type="button" onClick={() => setCashReceived(String(value))}>{value === total ? "Aniq summa" : formatMoney(value)}</button>)}</div> : null}</div> : null}
                 {selectedPaymentType === "CREDIT" ? <label className="qp-field"><span>To‘lov muddati</span><input className="qp-input" type="date" value={dueAt} onChange={(event) => setDueAt(event.target.value)}/></label> : null}
                 <div className="qp-pos-payment-summary"><span><small>Oraliq jami</small><b>{formatMoney(subtotal)}</b></span>{itemDiscount + generalDiscountAmount > 0 ? <span><small>Chegirma</small><b>-{formatMoney(itemDiscount + generalDiscountAmount)}</b></span> : null}</div>
-                <div className="qp-pos-cart-actions qp-pos-cart-actions-pro">{db.settings.pos.allowHeldCarts !== false ? <SecondaryButton disabled={!cart.length || checkoutBusy} onClick={holdCart}><Archive size={15}/> Kutishga qo‘yish</SecondaryButton> : null}<PrimaryButton disabled={checkoutBusy || !cart.length || (!customerId && db.settings.pos.allowAnonymousCustomer === false)} onClick={checkout}>{checkoutBusy ? <><LoaderCircle className="qp-spin" size={15}/> Yakunlanmoqda...</> : <><Check size={17}/> Savdoni yakunlash <kbd>F8</kbd></>}</PrimaryButton></div>
+                <div className="qp-pos-cart-actions qp-pos-cart-actions-pro">{db.settings.pos.allowHeldCarts !== false ? <SecondaryButton disabled={!online || !cart.length || checkoutBusy} onClick={holdCart}><Archive size={15}/> Kutishga qo‘yish</SecondaryButton> : null}<PrimaryButton disabled={!online || checkoutBusy || !cart.length || (!customerId && db.settings.pos.allowAnonymousCustomer === false)} onClick={checkout}>{checkoutBusy ? <><LoaderCircle className="qp-spin" size={15}/> Yakunlanmoqda...</> : <><Check size={17}/> Savdoni yakunlash <kbd>F8</kbd></>}</PrimaryButton></div>
               </div>
             </aside>
           </div>
@@ -907,6 +917,16 @@ function PosPage() {
       </Modal>
       <Modal open={customerOpen} title="Yangi mijoz" description="Mijoz darhol canonical bazaga yoziladi." onClose={()=>setCustomerOpen(false)}><form className="qp-form-stack" onSubmit={createCustomer}><Field label="Mijoz nomi"><input className="qp-input" value={customerForm.name} onChange={(event)=>setCustomerForm((current)=>({...current,name:event.target.value}))} required/></Field><Field label="Telefon"><input className="qp-input" value={customerForm.phone} onChange={(event)=>setCustomerForm((current)=>({...current,phone:event.target.value}))}/></Field><Field label="Kredit limiti"><input className="qp-input" type="number" min="0" value={customerForm.creditLimit} onChange={(event)=>setCustomerForm((current)=>({...current,creditLimit:event.target.value}))}/></Field><div className="qp-form-actions"><SecondaryButton type="button" onClick={()=>setCustomerOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit">Mijozni saqlash</PrimaryButton></div></form></Modal>
       <Modal open={Boolean(receiptPreview)} title="Savdo muvaffaqiyatli yakunlandi" description={receiptPreview?.sale?.number || "Chek tayyor"} onClose={()=>setReceiptPreview(null)}><div className="qp-receipt-preview"><Check size={30}/><strong>{formatMoney(receiptPreview?.sale?.total ?? receiptPreview?.cart?.reduce((sum,item)=>sum+item.price*item.quantity,0) ?? 0)}</strong><span>{receiptPreview?.customerName}</span><div className="qp-form-actions"><SecondaryButton onClick={()=>setReceiptPreview(null)}>Keyingi savdo</SecondaryButton><PrimaryButton onClick={()=>printPosReceipt(receiptPreview)}>Chekni chop etish</PrimaryButton></div></div></Modal>
+      <ConfirmActionModal
+        open={Boolean(pendingBranchId)}
+        title="Filialni almashtirish"
+        description="Joriy savatda mahsulotlar bor. Filial almashtirilsa ular yangi filial omboriga tegishli bo‘lmaydi."
+        consequence="Joriy savat tozalanadi. Saqlangan cheklar va yakunlangan savdolar o‘zgarmaydi."
+        confirmLabel="Savatni tozalab almashtirish"
+        tone="warning"
+        onClose={() => setPendingBranchId("")}
+        onConfirm={() => { const branchId = pendingBranchId; setPendingBranchId(""); changeBranch(branchId, true); }}
+      />
       <Modal
         open={categoryOpen}
         title="Yangi kategoriya"

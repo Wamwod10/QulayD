@@ -18,7 +18,9 @@ function DeliveryPlanningPage() {
     if (item.status !== "ACTIVE") return false;
     const modules = item.modules || item.moduleKeys || [];
     const roles = item.roles || [];
-    return modules.includes?.("driver_workspace") || roles.includes?.("DELIVERY_DRIVER") || item.role === "DELIVERY_DRIVER";
+    const legacyDriverText = `${item.employeeType?.code || ""} ${item.employeeType?.name || ""} ${item.title || ""}`.toLocaleLowerCase("uz-UZ");
+    return modules.includes?.("driver_workspace") || roles.includes?.("DELIVERY_DRIVER") || item.role === "DELIVERY_DRIVER"
+      || ["yetkazib beruvchi", "haydovchi", "kuryer", "driver", "courier"].some((token) => legacyDriverText.includes(token));
   }), [db.users]);
   const [warehouseId, setWarehouseId] = useState(db.settings.company.defaultWarehouseId || db.warehouses[0]?.id || "");
   const [driverUserId, setDriverUserId] = useState(availableDrivers[0]?.id || "");

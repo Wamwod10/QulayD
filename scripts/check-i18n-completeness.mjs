@@ -26,7 +26,7 @@ const objectTextRegex = /(?:label|title|description|placeholder|message|hint|eye
 function isTechnical(value) {
   const normalized = value.trim();
   if (!normalized) return true;
-  if (/^(Qulay|Qulay AI|UZ · RU · TJ · KZ)$/i.test(normalized)) return true;
+  if (/^(Qulay|Qulay AI|SKU \*|UZ · RU · TJ · KZ)$/i.test(normalized)) return true;
   if (/^(UZS|USD|EUR|RUB|GBP|CNY|AED|SKU|QR|GPS|EAN-13|CODE 128)$/i.test(normalized)) return true;
   if (/^(Ctrl|Alt|Shift|Esc|Enter|F\d+)(?:\s*\+?\s*[A-Z0-9]+)*$/i.test(normalized)) return true;
   if (/^[A-Z0-9_./:@#%+\-]{1,40}$/.test(normalized) && !/[a-z]/.test(normalized)) return true;
@@ -42,6 +42,8 @@ function isTechnical(value) {
   if (/^\+?\d[\d ()-]{5,}$/.test(normalized)) return true;
   if (/\b(className|styles\.|event\.|currentTarget|target\.|window\.|document\.|localStorage|JSON\.|Math\.|Number\(|String\(|Date\(|console\.)/.test(normalized)) return true;
   if (/^[A-Za-z_$][\w$]*\([^)]*\)$/.test(normalized)) return true;
+  if (/^(rowIndex|\d+\)\s*return)$/i.test(normalized)) return true;
+  if (/^\d{12,16}(?:\\n\d{12,16})+$/.test(normalized)) return true;
   if (/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)+$/.test(normalized)) return true;
   if (/[{};=<>]/.test(normalized)) return true;
   return false;

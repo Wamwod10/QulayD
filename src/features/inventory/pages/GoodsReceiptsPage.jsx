@@ -29,7 +29,7 @@ function GoodsReceiptsPage() {
   const setVariant = (variantId) => setForm((current) => ({ ...current, variantId, packageId: "" }));
   const submit = async (event) => {
     event.preventDefault();
-    if (!form.supplierId || !form.warehouseId || !form.productId || Number(form.quantity) <= 0) return notify("Yetkazib beruvchi, ombor, mahsulot va miqdorni kiriting", "warning");
+    if (!form.supplierId || !form.warehouseId || !form.productId || Number(form.quantity) <= 0) return notify("Ta’minotchi, ombor, mahsulot va miqdorni kiriting", "warning");
     if (variants.length && !form.variantId) return notify("Variantli mahsulot uchun variantni tanlang", "warning");
     if ((product?.trackLot || product?.trackExpiry) && !form.lotNumber.trim()) return notify("Lot/expiry kuzatuvi uchun lot/partiya raqami majburiy", "warning");
     if (product?.trackExpiry && !form.expiresAt) return notify("Bu mahsulot uchun yaroqlilik muddati majburiy", "warning");
@@ -43,12 +43,12 @@ function GoodsReceiptsPage() {
     <SmartTablePage title="Mahsulot kirimi" description="Yetkazib beruvchidan kelgan mahsulot qabul qilinganda qoldiq base unitda oshadi; variant, qadoq, lot, expiry va serial kuzatuvi saqlanadi." eyebrow="Ombor" rows={rows}
       searchFields={["number", "supplier", "warehouse"]} actions={<PrimaryButton onClick={() => setOpen(true)}><Plus size={15} /> Yangi kirim</PrimaryButton>}
       columns={[{ key: "number", label: "Hujjat", render: (row) => <strong>{row.number}</strong> }, { key: "date", label: "Sana", render: (row) => shortDate(row.date || row.createdAt) },
-        { key: "supplier", label: "Yetkazib beruvchi" }, { key: "warehouse", label: "Ombor" }, { key: "total", label: "Summa", render: (row) => formatMoney(row.total) },
+        { key: "supplier", label: "Ta’minotchi" }, { key: "warehouse", label: "Ombor" }, { key: "total", label: "Summa", render: (row) => formatMoney(row.total) },
         { key: "status", label: "Holat", render: (row) => <StatusPill status={row.status} /> }]} />
     <Modal open={open} title="Yangi kirim" description="Mahsulotning tracking sozlamalariga mos kirim yaratiladi va darhol tasdiqlanadi." onClose={() => setOpen(false)} wide>
       <form onSubmit={submit}>
         <div className="qp-form-grid">
-          <Field label="Yetkazib beruvchi"><Select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}><option value="">Tanlang</option>{db.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
+          <Field label="Ta’minotchi"><Select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}><option value="">Tanlang</option>{db.suppliers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
           <Field label="Ombor"><Select value={form.warehouseId} onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}>{db.warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
           <Field label="Mahsulot"><Select value={form.productId} onChange={(e) => setProduct(e.target.value)}><option value="">Tanlang</option>{db.products.filter((item) => item.status === "ACTIVE").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
           {variants.length ? <Field label="Variant"><Select value={form.variantId} onChange={(e) => setVariant(e.target.value)}><option value="">Variantni tanlang</option>{variants.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.sku}</option>)}</Select></Field> : null}

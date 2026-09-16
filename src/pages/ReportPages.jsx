@@ -5,14 +5,14 @@ import { NavLink } from "react-router-dom";
 import SmartTablePage from "../components/prototype/SmartTablePage";
 import { Metric, PageShell, SectionCard, StatusPill } from "../components/prototype/PrototypeUI";
 import { usePlatformFeatureFlag } from "../hooks/usePlatformSettings";
-import { apiRequest } from "../services/authService";
+import { loadReport } from "../services/reportService";
 import { formatMoney } from "../utils/formatters";
 
 function useReport(name) {
   const [data, setData] = useState(null);
   useEffect(() => {
     let active = true;
-    apiRequest({ url: `/reports/${name}` }).then((result) => { if (active) setData(result); }).catch(() => { if (active) setData(null); });
+    loadReport(name).then((result) => { if (active) setData(result); }).catch(() => { if (active) setData(null); });
     return () => { active = false; };
   }, [name]);
   return data;

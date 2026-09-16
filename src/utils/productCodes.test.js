@@ -6,7 +6,7 @@ describe("product identity", () => {
   it("creates a unique SKU and an empty first barcode", () => {
     const products = [{ id: "old", sku: "SKU-123456", barcode: "111", barcodes: ["111", "222"] }];
     const identity = createProductIdentity(products);
-    expect(identity.sku).toMatch(/^[A-Za-z0-9._\/-]{1,64}$/);
+    expect(identity.sku).toMatch(/^[A-Za-z0-9._/-]{1,64}$/);
     expect(identity.sku).not.toBe(products[0].sku);
     expect(identity.barcodes).toEqual([""]);
   });

@@ -71,7 +71,7 @@ function VisitsPage() {
     const plan = db.routePlans.find((item) => item.date === today && item.agentId === startForm.agentId);
     const allowedIds = new Set((plan?.stops || []).map((stop) => stop.customerId));
     return db.customers.filter((customer) => allowedIds.has(customer.id));
-  }, [db.customers, db.routePlans, db.settings.agents.allowOutsideRoute, startForm.agentId]);
+  }, [db.customers, db.routePlans, db.settings.agents.allowOutsideRoute, db.settings?.company?.timezone, startForm.agentId]);
 
   const rows = db.visits.map((item) => ({
     ...item,

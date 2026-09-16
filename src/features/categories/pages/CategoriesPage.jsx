@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 
 import RowActions from "../../../components/prototype/RowActions";
 import SmartTablePage from "../../../components/prototype/SmartTablePage";
-import { Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
+import { ConfirmActionModal, Field, Modal, PrimaryButton, SecondaryButton, StatusPill } from "../../../components/prototype/PrototypeUI";
 import { useLocalDb } from "../../../services/localDb";
 import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
@@ -13,6 +13,7 @@ function CategoriesPage() {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [name, setName] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const rows = useMemo(() => db.categories.map((category) => ({
     ...category,
@@ -59,6 +60,12 @@ function CategoriesPage() {
     notify(next === "ACTIVE" ? "Kategoriya faollashtirildi" : "Kategoriya faolsizlantirildi");
   };
 
+  const removeCategory = async () => {
+    if (!deleteTarget) return;
+    try { await apiRequest({ url: `/catalog/categories/${deleteTarget.id}`, method: "DELETE" }); notify("Kategoriya butunlay o‘chirildi", "warning"); setDeleteTarget(null); }
+    catch (error) { notify(error.message, "danger"); }
+  };
+
   return (
     <>
       <SmartTablePage
@@ -83,7 +90,7 @@ function CategoriesPage() {
               { label: row.status === "ACTIVE" ? "Faolsizlantirish" : "Faollashtirish", icon: Power, onClick: () => toggleStatus(row) },
               { label: "Butunlay o‘chirish", icon: Trash2, tone: "danger", onClick: () => {
                 if (row.productsCount > 0) { notify("Bu kategoriyada mahsulotlar bor. O‘chirish o‘rniga faolsizlantiring.", "warning"); return; }
-                if (window.confirm(`“${row.name}” kategoriyasi o‘chirilsinmi?`)) apiRequest({ url: `/catalog/categories/${row.id}`, method: "DELETE" }).then(() => notify("Kategoriya o‘chirildi", "warning")).catch((error) => notify(error.message, "danger"));
+                setDeleteTarget(row);
               } },
             ]} />,
           },
@@ -96,6 +103,7 @@ function CategoriesPage() {
           <div className="qp-form-actions"><SecondaryButton type="button" onClick={() => setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit">{editingId ? "Yangilash" : "Saqlash"}</PrimaryButton></div>
         </form>
       </Modal>
+      <ConfirmActionModal open={Boolean(deleteTarget)} title="Kategoriyani butunlay o‘chirish" description={deleteTarget ? `“${deleteTarget.name}” kategoriyasini o‘chirishni tasdiqlang.` : ""} consequence="Bu amalni ortga qaytarib bo‘lmaydi. Mahsulot bog‘langan kategoriya o‘chirilmaydi; uni faolsizlantirish mumkin." confirmLabel="Butunlay o‘chirish" onClose={() => setDeleteTarget(null)} onConfirm={removeCategory} />
     </>
   );
 }

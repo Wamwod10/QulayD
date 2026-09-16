@@ -121,6 +121,9 @@ function recordIdFromUrl(url = "", route = "") {
 export const baseApi = createApi({
   reducerPath: "api",
   baseQuery: baseQueryWithReauth,
+  refetchOnFocus: true,
+  refetchOnReconnect: true,
+  keepUnusedDataFor: 300,
   tagTypes: ALL_TAGS,
   endpoints: (builder) => ({
     login: builder.mutation({ query: (body) => ({ url: "/auth/login", method: "POST", body }), transformResponse: unwrap }),
@@ -172,7 +175,7 @@ export const baseApi = createApi({
           // Network/validation errors are handled by the caller.
         }
       },
-      invalidatesTags: ALL_TAGS,
+      invalidatesTags: [],
     }),
   }),
 });

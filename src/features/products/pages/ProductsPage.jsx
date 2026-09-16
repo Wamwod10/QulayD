@@ -19,7 +19,7 @@ import { formatMoney, getName } from "../../../utils/formatters";
 import { collectProductBarcodes, collectProductSkus, createProductIdentity, generateUniqueSku, getProductBarcodes } from "../../../utils/productCodes";
 
 const featureDefaults = { packaging: false, variants: false, expiry: false, lot: false, serial: false, marked: false, supplier: false, location: false };
-const blankForm = { name: "", images: [], sku: "", barcodes: [""], categoryId: "", unitId: "", costPrice: "", price: "", priceValues: {},
+const blankForm = { name: "", images: [], sku: "", barcodes: [""], categoryId: "", unitId: "", costPrice: "", primaryPriceListId: "", price: "", priceValues: {},
   minStock: "", warehouseId: "", initialStock: "", newStock: "", description: "", note: "", manufacturer: "", model: "", supplierId: "",
   warehouseLocation: "", status: "ACTIVE", features: featureDefaults, packages: [], axes: [], variants: [] };
 
@@ -41,8 +41,10 @@ function ProductsPage() {
   const [form, setForm] = useState(blankForm); const [busy, setBusy] = useState(false); const [detailTab, setDetailTab] = useState("general");
   const [categoryModalOpen, setCategoryModalOpen] = useState(false); const [categoryName, setCategoryName] = useState(""); const [categoryBusy, setCategoryBusy] = useState(false);
   const [showCatalogDetails, setShowCatalogDetails] = useState(false);
+  const [previewImage, setPreviewImage] = useState("");
   const activeWarehouses = (db.warehouses || []).filter((item) => item.status === "ACTIVE");
   const activePriceLists = useMemo(() => (db.priceLists || []).filter((item) => !["INACTIVE", "ARCHIVED"].includes(item.status)).sort((a, b) => Number(Boolean(b.isDefault)) - Number(Boolean(a.isDefault))), [db.priceLists]);
+  const primaryPriceList = activePriceLists.find((item) => item.id === form.primaryPriceListId) || activePriceLists[0];
   const stockMap = useMemo(() => (db.balances || []).reduce((map, balance) => { const stock = map[balance.productId] || { onHand: 0, reserved: 0 };
     stock.onHand += Number(balance.onHand || 0); stock.reserved += Number(balance.reserved || 0); map[balance.productId] = stock; return map; }, {}), [db.balances]);
   const rows = (db.products || []).map((product) => { const stock = stockMap[product.id] || { onHand: 0, reserved: 0 }; const barcodes = getProductBarcodes(product);
@@ -52,7 +54,7 @@ function ProductsPage() {
       variantSummary: (product.variants || []).map((item) => item.name).join(", "), expirySummary: (product.batches || []).map((item) => item.expiresAt).filter(Boolean).sort()[0] || "" }; });
 
   const preferredWarehouse = () => activeWarehouses.find((warehouse) => warehouse.id === db.settings.company?.defaultWarehouseId)?.id || activeWarehouses[0]?.id || "";
-  const openCreate = () => { setEditing(null); setShowCatalogDetails(false); setForm({ ...blankForm, features: { ...featureDefaults }, ...createProductIdentity(db.products), images: [], packages: [], axes: [], variants: [], warehouseId: preferredWarehouse() }); setOpen(true); };
+  const openCreate = () => { setEditing(null); setShowCatalogDetails(false); setForm({ ...blankForm, features: { ...featureDefaults }, ...createProductIdentity(db.products), images: [], packages: [], axes: [], variants: [], primaryPriceListId: activePriceLists[0]?.id || "", warehouseId: preferredWarehouse() }); setOpen(true); };
   useEffect(() => { if (searchParams.get("create") === "1") { openCreate(); const next = new URLSearchParams(searchParams); next.delete("create"); setSearchParams(next, { replace: true }); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, setSearchParams]);
@@ -64,7 +66,7 @@ function ProductsPage() {
     }));
     setEditing(product); setShowCatalogDetails(Boolean(product.manufacturer || product.model)); setForm({ ...blankForm, name: product.name || "", images: (product.images || []).map((item) => item.url).length ? product.images.map((item) => item.url) : product.image ? [product.image] : [],
       sku: product.sku || "", barcodes: getProductBarcodes(product).length ? getProductBarcodes(product) : [""], categoryId: product.categoryId || "", unitId: product.unitId || "",
-      costPrice: String(product.costPrice ?? ""), price: String(product.price ?? ""), priceValues: Object.fromEntries((product.prices || []).map((entry) => [entry.priceListId || entry.priceList?.id, String(entry.price ?? "")])), minStock: String(product.minStock ?? ""), warehouseId,
+      costPrice: String(product.costPrice ?? ""), primaryPriceListId: product.primaryPriceListId || product.prices?.find((entry) => entry.priceList?.isDefault)?.priceListId || activePriceLists[0]?.id || "", price: String(product.price ?? ""), priceValues: Object.fromEntries((product.prices || []).map((entry) => [entry.priceListId || entry.priceList?.id, String(entry.price ?? "")])), minStock: String(product.minStock ?? ""), warehouseId,
       newStock: String(balance?.onHand ?? 0), description: product.description || "", note: product.note || "", manufacturer: product.manufacturer || "", model: product.model || "",
       supplierId: product.supplierId || "", warehouseLocation: product.warehouseLocation || "", status: product.status || "ACTIVE", features: { packaging: Boolean(product.packages?.length), variants: Boolean(product.variants?.length),
         expiry: Boolean(product.trackExpiry), lot: Boolean(product.trackLot), serial: Boolean(product.trackSerial), marked: Boolean(product.isMarked), supplier: Boolean(product.supplierId), location: Boolean(product.warehouseLocation) },
@@ -74,6 +76,11 @@ function ProductsPage() {
   };
 
   const patchForm = (patch) => setForm((current) => ({ ...current, ...patch }));
+  const changePrimaryPriceList = (nextId) => setForm((current) => {
+    const previousId = current.primaryPriceListId || activePriceLists[0]?.id || "";
+    const priceValues = { ...(current.priceValues || {}), ...(previousId ? { [previousId]: current.price } : {}) };
+    return { ...current, primaryPriceListId: nextId, price: priceValues[nextId] ?? "", priceValues };
+  });
   const toggleFeature = (key) => setForm((current) => {
     if (key === "lot" && current.features.expiry && current.features.lot) {
       notify("Yaroqlilik muddati yoqilganida lot/partiyani o‘chirib bo‘lmaydi", "warning");
@@ -106,8 +113,8 @@ function ProductsPage() {
     const all = [...own, ...form.packages.map((item) => item.barcode?.trim()).filter(Boolean), ...form.variants.map((item) => item.barcode?.trim()).filter(Boolean)];
     const variantSkus = form.features.variants ? form.variants.map((item) => String(item.sku || "").trim()) : [];
     const allSkus = [sku, ...variantSkus];
-    if (!/^[A-Za-z0-9._\/-]{1,64}$/.test(sku)) return "SKU 1–64 belgi: harf, raqam, nuqta, _, / yoki - bo‘lishi mumkin";
-    if (variantSkus.some((value) => !/^[A-Za-z0-9._\/-]{1,64}$/.test(value))) return "Har bir variant SKU si 1–64 belgili valid kod bo‘lishi kerak";
+    if (!/^[A-Za-z0-9._/-]{1,64}$/.test(sku)) return "SKU 1–64 belgi: harf, raqam, nuqta, _, / yoki - bo‘lishi mumkin";
+    if (variantSkus.some((value) => !/^[A-Za-z0-9._/-]{1,64}$/.test(value))) return "Har bir variant SKU si 1–64 belgili valid kod bo‘lishi kerak";
     if (new Set(allSkus).size !== allSkus.length) return "Mahsulot va variant SKU qiymatlari takrorlanmasin";
     if (new Set(all).size !== all.length) return "Barcode qiymatlari takrorlanmasin";
     const existingSkus = collectProductSkus(db.products, editing?.id || ""); const duplicateSku = allSkus.find((value) => existingSkus.has(value));
@@ -119,15 +126,16 @@ function ProductsPage() {
   const advancedTracking = Boolean(form.features.serial || form.features.lot || form.features.expiry);
   const detailedInventory = Boolean(advancedTracking || form.features.variants);
 
-  const payload = () => ({ name: form.name.trim(), sku: form.sku, categoryId: form.categoryId || null, unitId: form.unitId,
+  const payload = () => ({ name: form.name.trim(), sku: form.sku, categoryId: form.categoryId || null, unitId: form.unitId, primaryPriceListId: primaryPriceList?.id || null,
     supplierId: form.features.supplier && form.supplierId ? form.supplierId : null, description: form.description.trim() || undefined, note: form.note.trim() || undefined,
     manufacturer: form.manufacturer.trim() || undefined, model: form.model.trim() || undefined, warehouseLocation: form.features.location ? form.warehouseLocation.trim() || undefined : undefined,
     imageUrl: form.images[0] || undefined, images: form.images.map((url, index) => ({ url, isPrimary: index === 0 })), costPrice: cleanNumber(form.costPrice), minStock: cleanNumber(form.minStock),
     trackExpiry: form.features.expiry, trackLot: form.features.lot, trackSerial: form.features.serial, isMarked: form.features.marked, status: form.status || "ACTIVE",
     barcodes: form.barcodes.map((barcode, index) => ({ barcode: barcode.trim(), isPrimary: index === 0 })).filter((item) => item.barcode),
-    prices: activePriceLists.flatMap((list, index) => {
-      const raw = index === 0 ? form.price : form.priceValues?.[list.id];
-      if (index > 0 && (raw === "" || raw == null)) return [];
+    prices: activePriceLists.flatMap((list) => {
+      const isPrimary = list.id === primaryPriceList?.id;
+      const raw = isPrimary ? form.price : form.priceValues?.[list.id];
+      if (!isPrimary && (raw === "" || raw == null)) return [];
       return [{ priceListId: list.id, price: cleanNumber(raw) }];
     }),
     packages: form.features.packaging ? form.packages.filter((item) => item.name.trim()).map((item) => ({ id: item.id, name: item.name.trim(), variantSku: form.features.variants && item.variantSku ? item.variantSku : null, conversionQuantity: cleanNumber(item.conversion),
@@ -138,6 +146,7 @@ function ProductsPage() {
 
   const submit = async (event) => { event.preventDefault(); if (busy) return; if (!form.name.trim() || !form.categoryId || !form.unitId) return notify("Majburiy maydonlarni to‘ldiring", "warning");
     if (!activePriceLists.length) return notify("Mahsulot narxini saqlash uchun avval kamida bitta faol Narx ro‘yxati yarating", "warning");
+    if (!(cleanNumber(form.price) > 0)) return notify("Sotuv narxi 0 dan katta bo‘lishi shart", "warning");
     const identityError = validateIdentity(); if (identityError) return notify(identityError, "warning"); if (form.features.packaging && form.packages.some((item) => cleanNumber(item.conversion) <= 0)) return notify("Qadoq konversiyasi 0 dan katta bo‘lsin", "warning");
     if (!editing && detailedInventory && cleanNumber(form.initialStock) > 0) return notify("Variant/serial/lot/expiry mahsulot qoldig‘ini Ombor → Kirim yoki Qoldiq tuzatish orqali aniq variant/tracking bilan kiriting", "warning");
     setBusy(true); try { const body = payload(); if (editing) { await apiRequest({ url: `/catalog/products/${editing.id}`, method: "PATCH", body });
@@ -168,7 +177,7 @@ function ProductsPage() {
     { key: "barcode", label: "SKU / asosiy barcode", render: (row) => <span>{row.sku}{row.barcode ? ` · ${row.barcode}` : ""}</span> }, { key: "category", label: "Kategoriya" }, { key: "unit", label: "Birlik" },
     { key: "costPrice", label: "Tannarx", render: (row) => formatMoney(row.costPrice) }, { key: "price", label: "Sotuv narxi", render: (row) => <strong>{formatMoney(row.price)}</strong> },
     { key: "availableStock", label: "Qoldiq", render: (row) => <strong>{row.availableStock} {row.unit}</strong> }, { key: "status", label: "Status", render: (row) => <StatusPill status={row.status} /> },
-    { key: "packageSummary", label: "Qadoqlar" }, { key: "packageQty", label: "Qadoqlar soni", render: (row) => row.packages?.length || 0 }, { key: "supplierName", label: "Yetkazib beruvchi" },
+    { key: "packageSummary", label: "Qadoqlar" }, { key: "packageQty", label: "Qadoqlar soni", render: (row) => row.packages?.length || 0 }, { key: "supplierName", label: "Ta’minotchi" },
     { key: "variantSummary", label: "Variantlar" }, { key: "warehouseLocation", label: "Ombor joyi" }, { key: "expirySummary", label: "Yaroqlilik" },
     { key: "trackLot", label: "Partiya nazorati", render: (row) => row.trackLot ? "Ha" : "Yo‘q" }, { key: "trackSerial", label: "Serial nazorati", render: (row) => row.trackSerial ? "Ha" : "Yo‘q" },
     { key: "isMarked", label: "Markirovka", render: (row) => row.isMarked ? "Ha" : "Yo‘q" }, { key: "updatedAt", label: "Yangilangan", render: (row) => row.updatedAt ? new Date(row.updatedAt).toLocaleDateString("uz-UZ") : "—" },
@@ -187,7 +196,7 @@ function ProductsPage() {
       bulkActions={(selected) => <SecondaryButton onClick={() => printProductLabels(selected)}><Printer size={15}/> Label chop etish</SecondaryButton>}
       detailTitle={(row) => row.name} detailDescription={(row) => `SKU ${row.sku} · ${row.category}`}
       detailRenderer={(row) => <div className="qp-product-detail"><div className="qp-product-detail-tabs">{detailTabs(row).map((tab) => <button key={tab.id} type="button" className={detailTab === tab.id ? "active" : ""} onClick={() => setDetailTab(tab.id)}>{tab.label}</button>)}</div>
-        {detailTab === "general" ? <div className="qp-drawer-details">{row.image ? <img className="qp-product-detail-image" src={row.image} alt={row.name}/> : null}
+        {detailTab === "general" ? <div className="qp-drawer-details">{row.images?.length ? <div className="qp-product-gallery">{row.images.map((image, index) => <button type="button" key={image.id || image.url} onClick={() => setPreviewImage(image.url)} aria-label={`${row.name} rasmi ${index + 1}`}><img className="qp-product-detail-image" src={image.url} alt={image.alt || `${row.name} ${index + 1}`}/>{index === 0 ? <span>Asosiy</span> : null}</button>)}</div> : row.image ? <button type="button" className="qp-product-gallery-single" onClick={() => setPreviewImage(row.image)}><img className="qp-product-detail-image" src={row.image} alt={row.name}/></button> : null}
           <div className="qp-drawer-detail-row"><span>Kategoriya / birlik</span><strong>{row.category} · {row.unit}</strong></div><div className="qp-drawer-detail-row"><span>Ishlab chiqaruvchi / model</span><strong>{[row.manufacturer, row.model].filter(Boolean).join(" · ") || "—"}</strong></div>
           <div className="qp-drawer-detail-row"><span>Tavsif</span><strong>{row.description || "—"}</strong></div></div> : null}
         {detailTab === "stock" ? <div className="qp-detail-kpis"><div><span>Haqiqiy qoldiq</span><strong>{row.onHand} {row.unit}</strong></div><div><span>Band</span><strong>{row.reserved}</strong></div><div><span>Sotish mumkin</span><strong>{row.availableStock}</strong></div><div><span>Joylashuv</span><strong>{row.warehouseLocation || "—"}</strong></div></div> : null}
@@ -243,13 +252,13 @@ function ProductsPage() {
                 <Field label="Mahsulot nomi *"><input className="qp-input" value={form.name} onChange={(event) => patchForm({ name: event.target.value })} placeholder="Masalan: iPhone 15 128GB" required/></Field>
                 <Field label="Kategoriya *"><div className="qp-field-with-action"><Select value={form.categoryId} onChange={(event) => patchForm({ categoryId: event.target.value })} required><option value="">Kategoriyani tanlang</option>{db.categories.filter((item) => item.status !== "INACTIVE").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select><button type="button" className="qp-mini-action" onClick={() => { setCategoryName(""); setCategoryModalOpen(true); }}><Plus size={14}/> Yangi</button></div></Field>
                 <Field label="O‘lchov birligi *"><Select value={form.unitId} onChange={(event) => patchForm({ unitId: event.target.value })} required><option value="">Birlikni tanlang</option>{db.units.filter((item) => item.status !== "INACTIVE").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
-                <Field label="SKU *" hint="1–64 belgi · QULAY ichida unikal"><div className="qp-code-edit-row"><input className="qp-input" maxLength={64} value={form.sku} onChange={(event) => patchForm({ sku: event.target.value.replace(/[^A-Za-z0-9._\/-]/g, "").slice(0, 64) })}/><button type="button" className="qp-icon-button" title="Yangi SKU yaratish" onClick={() => patchForm({ sku: generateUniqueSku(db.products, editing?.id) })}><RefreshCw size={15}/></button></div></Field>
+                <Field label="SKU *" hint="1–64 belgi · QULAY ichida unikal"><div className="qp-code-edit-row"><input className="qp-input" maxLength={64} value={form.sku} onChange={(event) => patchForm({ sku: event.target.value.replace(/[^A-Za-z0-9._/-]/g, "").slice(0, 64) })}/><button type="button" className="qp-icon-button" title="Yangi SKU yaratish" onClick={() => patchForm({ sku: generateUniqueSku(db.products, editing?.id) })}><RefreshCw size={15}/></button></div></Field>
               </div>
 
               <div className="qp-product-barcode-block">
                 <div className="qp-editor-head"><div><strong><Barcode size={16}/> Shtrix-kodlar</strong><span>Bir mahsulotga bir nechta barcode biriktirish mumkin. Birinchisi asosiy.</span></div><SecondaryButton type="button" onClick={() => patchForm({ barcodes: [...form.barcodes, ""] })}><Plus size={14}/> Barcode</SecondaryButton></div>
                 <div className="qp-product-barcode-list">
-                  {form.barcodes.map((barcode, index) => <div className="qp-barcode-row qp-barcode-row-premium" key={`${index}-${barcode}`}><span>{index === 0 ? "ASOSIY" : `#${index + 1}`}</span><Barcode size={16}/><input className="qp-input" placeholder="Shtrix-kodni kiriting yoki skaner qiling" value={barcode} onChange={(event) => patchForm({ barcodes: form.barcodes.map((item, itemIndex) => itemIndex === index ? event.target.value : item) })}/><button type="button" className="qp-icon-button" disabled={form.barcodes.length === 1} onClick={() => patchForm({ barcodes: form.barcodes.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 size={15}/></button></div>)}
+                  {form.barcodes.map((barcode, index) => <div className="qp-barcode-row qp-barcode-row-premium" key={index}><span>{index === 0 ? "ASOSIY" : `#${index + 1}`}</span><Barcode size={16}/><input className="qp-input" placeholder="Shtrix-kodni kiriting yoki skaner qiling" value={barcode} onChange={(event) => patchForm({ barcodes: form.barcodes.map((item, itemIndex) => itemIndex === index ? event.target.value : item) })}/><button type="button" className="qp-icon-button" disabled={form.barcodes.length === 1} onClick={() => patchForm({ barcodes: form.barcodes.filter((_, itemIndex) => itemIndex !== index) })}><Trash2 size={15}/></button></div>)}
                 </div>
               </div>
             </section>
@@ -258,13 +267,14 @@ function ProductsPage() {
               <header><span className="qp-section-icon"><DollarSign size={17}/></span><div><strong>Narx va qoldiq</strong><small>Sotuv narxlari, minimal qoldiq va asosiy ombor</small></div></header>
               <div className="qp-form-grid qp-product-commerce-grid">
                 <Field label="Tannarx"><input className="qp-input" type="number" min="0" step="0.01" value={form.costPrice} onChange={(event) => patchForm({ costPrice: event.target.value })} placeholder="0"/></Field>
-                <Field label={`${activePriceLists[0]?.name || "Sotuv narxi"} *`} hint={activePriceLists[0]?.code ? `Narx ro‘yxati: ${activePriceLists[0].code}` : "Asosiy sotuv narxi"}><input className="qp-input" type="number" min="0" step="0.01" value={form.price} onChange={(event) => patchForm({ price: event.target.value })} placeholder="0" required/></Field>
+                <Field label="Asosiy narx ro‘yxati *" hint="Sotuv narxi aynan shu faol ro‘yxatga yoziladi"><Select value={primaryPriceList?.id || ""} onChange={(event) => changePrimaryPriceList(event.target.value)} required><option value="">Narx ro‘yxatini tanlang</option>{activePriceLists.map((list) => <option key={list.id} value={list.id}>{list.name}{list.isDefault ? " · kompaniya standarti" : ""}</option>)}</Select></Field>
+                <Field label={`${primaryPriceList?.name || "Sotuv narxi"} *`} hint={primaryPriceList?.code ? `Narx ro‘yxati: ${primaryPriceList.code}` : "Asosiy sotuv narxi"}><input className="qp-input" type="number" min="0.01" step="0.01" value={form.price} onChange={(event) => patchForm({ price: event.target.value })} placeholder="0.00" required/></Field>
                 <div className="qp-product-price-list-note"><Tags size={16}/><span><strong>Narx ro‘yxatlari</strong><small>Qo‘shimcha narxlar faqat kompaniyangiz yaratgan narx ro‘yxatlaridan keladi.</small></span></div>
                 <Field label="Minimal qoldiq"><input className="qp-input" type="number" min="0" step="0.001" value={form.minStock} onChange={(event) => patchForm({ minStock: event.target.value })} placeholder="0"/></Field>
                 <Field label={editing ? "Qoldiq ombori" : "Boshlang‘ich ombor"}><Select value={form.warehouseId} onChange={(event) => changeWarehouse(event.target.value)}><option value="">Omborni tanlang</option>{activeWarehouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
                 {!detailedInventory ? <Field label={editing ? "Yangi haqiqiy qoldiq" : "Boshlang‘ich qoldiq"} hint="Asosiy birlikdagi qoldiq"><input className="qp-input" type="number" min="0" step="0.001" value={editing ? form.newStock : form.initialStock} onChange={(event) => patchForm(editing ? { newStock: event.target.value } : { initialStock: event.target.value })}/></Field> : <div className="qp-product-stock-managed"><Warehouse size={16}/><span><strong>Qoldiq Kirim orqali boshqariladi</strong><small>Variant, serial, partiya yoki yaroqlilik ma’lumotlari bilan aniq qabul qiling.</small></span></div>}
               </div>
-              {activePriceLists.length > 1 ? <div className="qp-product-price-lists"><div className="qp-product-subsection-head"><div><strong>Qo‘shimcha narx ro‘yxatlari</strong><small>Kompaniyangiz yaratgan qo‘shimcha narx ro‘yxatlari. Keraksiz bo‘lsa bo‘sh qoldiring.</small></div></div><div className="qp-product-price-list-grid">{activePriceLists.slice(1).map((list) => <Field key={list.id} label={list.name} hint={list.code ? `Kod: ${list.code}` : "Ixtiyoriy narx"}><input className="qp-input" type="number" min="0" step="0.01" value={form.priceValues?.[list.id] ?? ""} onChange={(event) => patchForm({ priceValues: { ...(form.priceValues || {}), [list.id]: event.target.value } })} placeholder="0"/></Field>)}</div></div> : null}
+              {activePriceLists.length > 1 ? <div className="qp-product-price-lists"><div className="qp-product-subsection-head"><div><strong>Qo‘shimcha narx ro‘yxatlari</strong><small>Kompaniyangiz yaratgan qo‘shimcha narx ro‘yxatlari. Keraksiz bo‘lsa bo‘sh qoldiring.</small></div></div><div className="qp-product-price-list-grid">{activePriceLists.filter((list) => list.id !== primaryPriceList?.id).map((list) => <Field key={list.id} label={list.name} hint={list.code ? `Kod: ${list.code}` : "Ixtiyoriy narx"}><input className="qp-input" type="number" min="0.01" step="0.01" value={form.priceValues?.[list.id] ?? ""} onChange={(event) => patchForm({ priceValues: { ...(form.priceValues || {}), [list.id]: event.target.value } })} placeholder="Ixtiyoriy"/></Field>)}</div></div> : null}
               {cleanNumber(form.price) > 0 ? <div className="qp-product-margin-strip"><span>Marja</span><strong>{Math.max(0, Math.round((cleanNumber(form.price) - cleanNumber(form.costPrice)) * 100) / 100).toLocaleString("uz-UZ")} so‘m</strong><small>{cleanNumber(form.costPrice) > 0 ? `${Math.round(((cleanNumber(form.price) - cleanNumber(form.costPrice)) / cleanNumber(form.costPrice)) * 100)}% ustama` : "Tannarx kiritilmagan"}</small></div> : null}
             </section>
 
@@ -273,7 +283,7 @@ function ProductsPage() {
               <div className="qp-product-feature-groups">
                 <div><div className="qp-product-feature-group-title"><strong>Savdo tuzilmasi</strong><small>Mahsulot qanday sotiladi</small></div><div className="qp-product-feature-grid qp-product-feature-grid-premium">{[['packaging','Qadoqlash','Quti, pachka, blok'],['variants','Variantlar','Rang, razmer, xotira']].map(([key,label,caption]) => <FeatureToggle key={key} active={form.features[key]} label={<span><b>{label}</b><small>{caption}</small></span>} onClick={() => toggleFeature(key)}/>)}</div></div>
                 <div><div className="qp-product-feature-group-title"><strong>Kuzatuv</strong><small>Serial, partiya va yaroqlilik</small></div><div className="qp-product-feature-grid qp-product-feature-grid-premium">{[['serial','Serial / IMEI','Har dona alohida kuzatiladi'],['lot','Partiya','Partiya bo‘yicha qoldiq'],['expiry','Yaroqlilik muddati','FEFO va muddat nazorati'],['marked','Markirovka','Markirovkali mahsulot']].map(([key,label,caption]) => <FeatureToggle key={key} active={form.features[key]} label={<span><b>{label}</b><small>{caption}</small></span>} onClick={() => toggleFeature(key)}/>)}</div></div>
-                <div><div className="qp-product-feature-group-title"><strong>Ta’minot va joylashuv</strong><small>Yetkazib beruvchi va ombor joyi</small></div><div className="qp-product-feature-grid qp-product-feature-grid-premium">{[['supplier','Yetkazib beruvchi','Asosiy ta’minotchi'],['location','Ombor joyi','Raf / bin / zona']].map(([key,label,caption]) => <FeatureToggle key={key} active={form.features[key]} label={<span><b>{label}</b><small>{caption}</small></span>} onClick={() => toggleFeature(key)}/>)}</div></div>
+                <div><div className="qp-product-feature-group-title"><strong>Ta’minot va joylashuv</strong><small>Ta’minotchi va ombor joyi</small></div><div className="qp-product-feature-grid qp-product-feature-grid-premium">{[['supplier','Ta’minotchi','Asosiy ta’minotchi'],['location','Ombor joyi','Raf / bin / zona']].map(([key,label,caption]) => <FeatureToggle key={key} active={form.features[key]} label={<span><b>{label}</b><small>{caption}</small></span>} onClick={() => toggleFeature(key)}/>)}</div></div>
               </div>
 
               {form.features.packaging ? <div className="qp-advanced-editor qp-packaging-editor"><div className="qp-editor-head"><div><strong><Boxes size={16}/> Qadoqlash birliklari</strong><span>Masalan: 1 pachka = 12 dona, 1 quti = 6 pachka. POS qadoq barcode’ini ham taniydi.</span></div><SecondaryButton type="button" onClick={() => patchForm({ packages: [...form.packages, { name: "", variantSku: "", conversion: "", barcode: "", price: "", costPrice: "" }] })}><Plus size={14}/> Qadoq</SecondaryButton></div>
@@ -285,19 +295,19 @@ function ProductsPage() {
                 {!form.axes.length ? <button type="button" className="qp-product-empty-action" onClick={() => patchForm({ axes: [{ name: "Rang", values: "" }] })}><Plus size={16}/> Masalan “Rang” xususiyatini qo‘shish</button> : null}
                 {form.axes.map((axis,index) => <div className="qp-axis-card" key={index}><div className="qp-axis-row"><input className="qp-input" placeholder="Xususiyat: Rang" value={axis.name} onChange={(event) => updateList('axes',index,{name:event.target.value})}/><input className="qp-input" placeholder="Qora, Oq, Ko‘k" value={axis.values} onChange={(event) => updateList('axes',index,{values:event.target.value})}/><button type="button" className="qp-icon-button" onClick={() => removeList('axes',index)}><Trash2 size={15}/></button></div>{axis.values.trim() ? <div className="qp-axis-chip-preview">{axis.values.split(',').map((value) => value.trim()).filter(Boolean).map((value) => <span key={value}>{value}</span>)}</div> : null}</div>)}
                 <div className="qp-variant-generate-row"><SecondaryButton type="button" onClick={generateVariants}><Boxes size={15}/> Kombinatsiyalarni yaratish</SecondaryButton>{form.variants.length ? <span>{form.variants.length} ta variant tayyor</span> : null}</div>
-                {form.variants.length ? <div className="qp-variant-table"><div className="qp-variant-row head"><span>Variant</span><span>SKU</span><span>Barcode</span><span>{`${activePriceLists.find((list) => list.isDefault)?.name || "Asosiy"} narxi`}</span></div>{form.variants.map((item,index) => <div className="qp-variant-row" key={item.id || `${item.name}-${index}`}><strong>{item.name}</strong><input className="qp-input" value={item.sku} onChange={(event)=>updateList('variants',index,{sku:event.target.value.replace(/[^A-Za-z0-9._\/-]/g,'').slice(0,64)})}/><input className="qp-input" value={item.barcode} placeholder="Ixtiyoriy" onChange={(event)=>updateList('variants',index,{barcode:event.target.value})}/><input className="qp-input" type="number" min="0" value={item.price} placeholder="Asosiy narx" onChange={(event)=>updateList('variants',index,{price:event.target.value})}/></div>)}</div> : null}
+                {form.variants.length ? <div className="qp-variant-table"><div className="qp-variant-row head"><span>Variant</span><span>SKU</span><span>Barcode</span><span>{`${activePriceLists.find((list) => list.isDefault)?.name || "Asosiy"} narxi`}</span></div>{form.variants.map((item,index) => <div className="qp-variant-row" key={item.id || `${item.name}-${index}`}><strong>{item.name}</strong><input className="qp-input" value={item.sku} onChange={(event)=>updateList('variants',index,{sku:event.target.value.replace(/[^A-Za-z0-9._/-]/g,'').slice(0,64)})}/><input className="qp-input" value={item.barcode} placeholder="Ixtiyoriy" onChange={(event)=>updateList('variants',index,{barcode:event.target.value})}/><input className="qp-input" type="number" min="0" value={item.price} placeholder="Asosiy narx" onChange={(event)=>updateList('variants',index,{price:event.target.value})}/></div>)}</div> : null}
               </div> : null}
             </section>
 
             <section className="qp-product-form-card">
-              <header><span className="qp-section-icon"><Warehouse size={17}/></span><div><strong>Ta’minot va ombor</strong><small>Yetkazib beruvchi, joylashuv va katalog ma’lumotlari</small></div></header>
+              <header><span className="qp-section-icon"><Warehouse size={17}/></span><div><strong>Ta’minot va ombor</strong><small>Ta’minotchi, joylashuv va katalog ma’lumotlari</small></div></header>
               <div className="qp-product-optional-actions">
-                {!form.features.supplier ? <button type="button" onClick={() => toggleFeature("supplier")}><Truck size={15}/><span><b>Yetkazib beruvchi biriktirish</b><small>Asosiy ta’minotchini tanlash</small></span><Plus size={14}/></button> : null}
+                {!form.features.supplier ? <button type="button" onClick={() => toggleFeature("supplier")}><Truck size={15}/><span><b>Ta’minotchi biriktirish</b><small>Asosiy ta’minotchini tanlash</small></span><Plus size={14}/></button> : null}
                 {!form.features.location ? <button type="button" onClick={() => toggleFeature("location")}><MapPin size={15}/><span><b>Ombor joyini kiritish</b><small>Raf / bin / zona</small></span><Plus size={14}/></button> : null}
                 {!showCatalogDetails ? <button type="button" onClick={() => setShowCatalogDetails(true)}><Tags size={15}/><span><b>Ishlab chiqaruvchi / model</b><small>Kerak bo‘lsa qo‘shimcha katalog ma’lumoti</small></span><Plus size={14}/></button> : null}
               </div>
               {(form.features.supplier || form.features.location || showCatalogDetails) ? <div className="qp-form-grid qp-product-ops-grid">
-                {form.features.supplier ? <Field label="Asosiy yetkazib beruvchi"><Select value={form.supplierId} onChange={(event)=>patchForm({supplierId:event.target.value})}><option value="">Yetkazib beruvchini tanlang</option>{db.suppliers.filter((item) => item.status !== "INACTIVE").map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field> : null}
+                {form.features.supplier ? <Field label="Asosiy ta’minotchi"><Select value={form.supplierId} onChange={(event)=>patchForm({supplierId:event.target.value})}><option value="">Ta’minotchini tanlang</option>{db.suppliers.filter((item) => item.status !== "INACTIVE").map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field> : null}
                 {form.features.location ? <Field label="Ombordagi joy / bin"><div className="qp-input-with-icon"><MapPin size={16}/><input className="qp-input" placeholder="Masalan: A-1-3" value={form.warehouseLocation} onChange={(event)=>patchForm({warehouseLocation:event.target.value})}/></div></Field> : null}
                 {showCatalogDetails ? <><Field label="Ishlab chiqaruvchi"><input className="qp-input" placeholder="Masalan: ishlab chiqaruvchi nomi" value={form.manufacturer} onChange={(event)=>patchForm({manufacturer:event.target.value})}/></Field>
                 <Field label="Model"><input className="qp-input" placeholder="Model / artikul" value={form.model} onChange={(event)=>patchForm({model:event.target.value})}/></Field></> : null}
@@ -319,6 +329,7 @@ function ProductsPage() {
       <form onSubmit={createCategoryInline}><Field label="Kategoriya nomi"><input className="qp-input" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} placeholder="Masalan: Telefon va aksessuarlar" autoFocus required/></Field><div className="qp-form-actions"><SecondaryButton type="button" disabled={categoryBusy} onClick={() => setCategoryModalOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit" disabled={categoryBusy || !categoryName.trim()}>{categoryBusy ? <><LoaderCircle className="qp-spin" size={15}/> Saqlanmoqda...</> : "Kategoriya yaratish"}</PrimaryButton></div></form>
     </Modal>
     <BarcodeQrModal open={Boolean(codeProduct)} product={codeProduct} onClose={()=>setCodeProduct(null)}/>
+    <Modal open={Boolean(previewImage)} title="Mahsulot rasmi" onClose={() => setPreviewImage("")} wide><div className="qp-product-lightbox"><img src={previewImage} alt="Mahsulot katta ko‘rinishi" /></div></Modal>
   </>;
 }
 

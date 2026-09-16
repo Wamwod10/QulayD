@@ -1,5 +1,6 @@
 import { Camera, Keyboard, ScanBarcode, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { BrowserMultiFormatReader } from "@zxing/browser";
 
 import { Modal, PrimaryButton, SecondaryButton } from "../prototype/PrototypeUI";
 
@@ -7,6 +8,7 @@ function CameraScannerModal({ open, onClose, onDetected, title = "Shtrix-kod ska
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const animationRef = useRef(0);
+  const fallbackControlsRef = useRef(null);
   const onCloseRef = useRef(onClose);
   const onDetectedRef = useRef(onDetected);
   onCloseRef.current = onClose;
@@ -20,6 +22,8 @@ function CameraScannerModal({ open, onClose, onDetected, title = "Shtrix-kod ska
 
     const stop = () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      fallbackControlsRef.current?.stop?.();
+      fallbackControlsRef.current = null;
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     };
@@ -30,16 +34,29 @@ function CameraScannerModal({ open, onClose, onDetected, title = "Shtrix-kod ska
         return;
       }
       try {
+        if (!("BarcodeDetector" in window)) {
+          setStatus("Kodni kamera markaziga tuting · moslik rejimi");
+          const reader = new BrowserMultiFormatReader(undefined, { delayBetweenScanAttempts: 120 });
+          const controls = await reader.decodeFromConstraints(
+            { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+            videoRef.current,
+            (result) => {
+              const value = result?.getText?.();
+              if (!value || cancelled) return;
+              onDetectedRef.current?.(value);
+              onCloseRef.current?.();
+            },
+          );
+          if (cancelled) controls.stop();
+          else fallbackControlsRef.current = controls;
+          return;
+        }
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
         if (cancelled) { stream.getTracks().forEach((track) => track.stop()); return; }
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
-        }
-        if (!("BarcodeDetector" in window)) {
-          setStatus("Kamera ochildi, lekin avtomatik tanish bu brauzerda mavjud emas. Kodni qo‘lda kiriting.");
-          return;
         }
         const detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "code_128", "qr_code", "upc_a", "upc_e"] });
         setStatus("Kodni kamera markaziga tuting");

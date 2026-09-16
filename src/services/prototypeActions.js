@@ -8,12 +8,12 @@ async function perform(request, successMessage) {
 export async function createProduct(payload) {
   const barcodes = (payload.barcodes?.length ? payload.barcodes : [payload.barcode]).filter(Boolean).map((barcode, index) => ({ barcode: String(barcode), isPrimary: index === 0 }));
   const prices = Array.isArray(payload.prices)
-    ? payload.prices.filter((item) => item?.priceListId && Number(item.price) >= 0).map((item) => ({ priceListId: item.priceListId, price: Number(item.price) }))
+    ? payload.prices.filter((item) => item?.priceListId && Number(item.price) > 0).map((item) => ({ priceListId: item.priceListId, price: Number(item.price) }))
     : payload.priceListId && payload.price != null ? [{ priceListId: payload.priceListId, price: Number(payload.price) }] : [];
   const openingStock = payload.warehouseId && Number(payload.initialStock) > 0 ? [{ warehouseId: payload.warehouseId, onHand: Number(payload.initialStock) }] : undefined;
   return perform({ url: "/catalog/products", body: { name: payload.name, sku: payload.sku || undefined, categoryId: payload.categoryId || null,
     unitId: payload.unitId, imageUrl: payload.image || undefined, costPrice: Number(payload.costPrice || 0), minStock: Number(payload.minStock || 0),
-    barcodes, prices, openingStock } }, "Mahsulot yaratildi");
+    primaryPriceListId: payload.primaryPriceListId || payload.priceListId || prices[0]?.priceListId, barcodes, prices, openingStock } }, "Mahsulot yaratildi");
 }
 
 export async function adjustProductStock({ productId, warehouseId, newOnHand, currentOnHand = 0, reason = "Mahsulot qoldig‘i tuzatildi" }) {
@@ -33,7 +33,7 @@ export async function createCustomer(payload) {
 
 export async function createSupplier(payload) {
   return perform({ url: "/suppliers", body: { code: payload.code || `SUP-${Date.now().toString(36).toUpperCase()}`, name: payload.name,
-    phone: payload.phone || undefined, status: payload.status || "ACTIVE", metadata: { contact: payload.contact || null, image: payload.image || null } } }, "Yetkazib beruvchi yaratildi");
+    phone: payload.phone || undefined, status: payload.status || "ACTIVE", metadata: { contact: payload.contact || null, image: payload.image || null } } }, "Ta’minotchi yaratildi");
 }
 
 export async function createOrder(payload) {

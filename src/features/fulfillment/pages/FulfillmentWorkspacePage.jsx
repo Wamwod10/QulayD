@@ -55,7 +55,7 @@ function FulfillmentWorkspacePage(){
       pickedQuantity:String(Number(line.pickedQuantity||0)), shortageQuantity:String(Number(line.shortageQuantity||0)),
       serialIds:Array.isArray(line.serialIds)?line.serialIds:[], batchAllocations:Array.isArray(line.batchAllocations)?line.batchAllocations:[], note:line.note||"",
     }])));
-  },[selected?.id, selected?.updatedAt]);
+  },[selected]);
 
   const required=lines.reduce((sum,line)=>sum+Number(line.requiredQuantity||0),0);
   const picked=lines.reduce((sum,line)=>sum+Number(line.pickedQuantity||0),0);

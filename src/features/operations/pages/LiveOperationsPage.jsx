@@ -20,9 +20,9 @@ function stage(order, db) {
     const trip = (db.deliveryTrips || []).find((item) => item.id === delivery?.tripId);
     return { key: "DELIVERY", label: "Yetkazilmoqda", status: "OUT_FOR_DELIVERY", owner: trip?.driver || "Haydovchi tanlanmagan" };
   }
-  if (["RESERVED", "PICKING", "PICKED", "PACKING", "PACKED", "READY", "COMPLETED"].includes(order.fulfillmentStatus)) {
+  if (["RESERVED", "PICKING", "PICKED", "PACKING", "PACKED", "FULFILLED"].includes(order.fulfillmentStatus)) {
     const pick = (db.pickLists || []).find((item) => item.orderId === order.id);
-    return { key: "PREPARING", label: "Tayyorlanmoqda", status: order.fulfillmentStatus === "READY" ? "READY" : "PICKING", owner: pick?.picker || "Ombor jamoasi" };
+    return { key: "PREPARING", label: "Tayyorlanmoqda", status: order.fulfillmentStatus === "FULFILLED" ? "READY" : "PICKING", owner: pick?.picker || "Ombor jamoasi" };
   }
   return { key: "NEW", label: "Yangi", status: "PENDING", owner: getName(db.agents, order.agentId, "Biznes egasi") };
 }

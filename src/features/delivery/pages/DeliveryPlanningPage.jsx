@@ -9,26 +9,35 @@ import Select from "../../../components/ui/Select";
 import { useLocalDb } from "../../../services/localDb";
 import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
-import { useAuth } from "../../../hooks/useAuth";
 import { formatMoney, getName } from "../../../utils/formatters";
 
 function DeliveryPlanningPage() {
   const db = useLocalDb();
-  const { user } = useAuth();
   const navigate = useNavigate();
-  const availableDrivers = useMemo(() => {
-    const employees = (db.users || []).filter((item) => item.status === "ACTIVE" && (item.role === "DELIVERY_DRIVER" || item.roles?.includes("DELIVERY_DRIVER")));
-    if (employees.length) return employees;
-    return user ? [{ id: "owner-delivery", name: user.name || "Biznes egasi", phone: user.phone || "", title: "Ega (o‘zim yetkazaman)" }] : [];
-  }, [db.users, user]);
+  const availableDrivers = useMemo(() => (db.users || []).filter((item) => {
+    if (item.status !== "ACTIVE") return false;
+    const modules = item.modules || item.moduleKeys || [];
+    const roles = item.roles || [];
+    return modules.includes?.("driver_workspace") || roles.includes?.("DELIVERY_DRIVER") || item.role === "DELIVERY_DRIVER";
+  }), [db.users]);
   const [warehouseId, setWarehouseId] = useState(db.settings.company.defaultWarehouseId || db.warehouses[0]?.id || "");
   const [driverUserId, setDriverUserId] = useState(availableDrivers[0]?.id || "");
   const [vehicle, setVehicle] = useState(db.deliveryTrips[0]?.vehicle || "01 A 777 AA");
   const [date, setDate] = useState(new Date().toLocaleDateString("en-CA", { timeZone: db.settings.locale?.timezone || "Asia/Tashkent" }));
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
-  const selectedDriver = availableDrivers.find((item) => item.id === driverUserId) || availableDrivers[0] || null;
+  const selectedDriver = availableDrivers.find((item) => item.id === driverUserId) || null;
 
-  const assignedOrderIds = useMemo(() => new Set(db.deliveries.filter((delivery) => !["CANCELLED", "FAILED"].includes(delivery.status)).map((delivery) => delivery.orderId)), [db.deliveries]);
+  const assignedOrderIds = useMemo(() => {
+    const tripById = new Map((db.deliveryTrips || []).map((trip) => [trip.id, trip]));
+    return new Set((db.deliveries || []).filter((delivery) => {
+      if (["PLANNED", "OUT_FOR_DELIVERY", "ARRIVED"].includes(delivery.status)) return true;
+      if (["PARTIALLY_DELIVERED", "FAILED"].includes(delivery.status)) {
+        const trip = tripById.get(delivery.tripId);
+        return trip && !["COMPLETED", "CANCELLED"].includes(trip.status);
+      }
+      return false;
+    }).map((delivery) => delivery.orderId));
+  }, [db.deliveries, db.deliveryTrips]);
   const readyOrders = db.orders.filter((order) => order.warehouseId === warehouseId && order.status === "CONFIRMED" && ["FULFILLED", "READY"].includes(order.fulfillmentStatus) && !assignedOrderIds.has(order.id));
   const selectedOrders = readyOrders.filter((order) => selectedOrderIds.includes(order.id));
   const selectedCustomers = selectedOrders.map((order) => db.customers.find((customer) => customer.id === order.customerId)).filter(Boolean);
@@ -43,8 +52,8 @@ function DeliveryPlanningPage() {
 
   const createTrip = async () => {
     if (!selectedOrders.length) { notify("Reys uchun kamida bitta buyurtma tanlang", "warning"); return; }
-    if (!selectedDriver || !vehicle.trim()) { notify("Haydovchi va mashinani tanlang", "warning"); return; }
-    try { const trip = await apiRequest({ url: "/delivery/trips", body: { warehouseId, driverEmployeeId: selectedDriver.id === user?.id ? user.id : selectedDriver.id,
+    if (!vehicle.trim()) { notify("Mashina ma’lumotini kiriting", "warning"); return; }
+    try { const trip = await apiRequest({ url: "/delivery/trips", body: { warehouseId, driverEmployeeId: selectedDriver?.id || null, plannedDate: date,
       vehicle: vehicle.trim(), plannedKm: Math.max(5, selectedOrders.length * 6), plannedMinutes: Math.max(40, selectedOrders.length * 25), orderIds: selectedOrderIds } }); notify(`${trip.number} yaratildi`); navigate("/deliveries"); }
     catch (error) { notify(error.message, "danger"); }
   };
@@ -56,7 +65,7 @@ function DeliveryPlanningPage() {
         <div className="qp-form-grid">
           <Field label="Sana"><div className="qp-input-with-icon"><CalendarDays size={16} /><input className="qp-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} /></div></Field>
           <Field label="Ombor"><Select value={warehouseId} onChange={(event) => { setWarehouseId(event.target.value); setSelectedOrderIds([]); }}>{db.warehouses.filter((item) => item.status === "ACTIVE").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
-          <Field label="Haydovchi"><Select value={selectedDriver?.id || ""} onChange={(event) => setDriverUserId(event.target.value)}>{availableDrivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.name} · {driver.title || "Haydovchi"}</option>)}</Select></Field>
+          <Field label="Haydovchi"><Select value={selectedDriver?.id || ""} onChange={(event) => setDriverUserId(event.target.value)}><option value="">Owner/Admin o‘zi boshqaradi</option>{availableDrivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.name} · {driver.title || "Haydovchi"}</option>)}</Select></Field>
           <Field label="Haydovchi telefoni"><input className="qp-input" value={selectedDriver?.phone || ""} disabled /></Field>
           <Field label="Mashina"><input className="qp-input" value={vehicle} onChange={(event) => setVehicle(event.target.value)} placeholder="01 A 777 AA" /></Field>
         </div>
@@ -69,7 +78,7 @@ function DeliveryPlanningPage() {
       </section>
     </div>
 
-    <section className="qp-card qp-delivery-plan-map"><div className="qp-card-head"><div><h2><MapPinned size={17} /> Marshrut ko‘rinishi</h2><p>Tanlangan nuqtalar Yandex xaritada ketma-ket ko‘rsatiladi.</p></div><div className="qp-inline-actions"><span className="qp-muted"><UserRound size={14} /> {selectedDriver?.name || "Haydovchi tanlanmagan"}</span><PrimaryButton type="button" onClick={createTrip}>Reysni yaratish</PrimaryButton></div></div><YandexMap points={routePoints} routePoints={routePoints} height={480} /></section>
+    <section className="qp-card qp-delivery-plan-map"><div className="qp-card-head"><div><h2><MapPinned size={17} /> Marshrut ko‘rinishi</h2><p>Tanlangan nuqtalar Yandex xaritada ketma-ket ko‘rsatiladi.</p></div><div className="qp-inline-actions"><span className="qp-muted"><UserRound size={14} /> {selectedDriver?.name || "Owner/Admin"}</span><PrimaryButton type="button" onClick={createTrip}>Reysni yaratish</PrimaryButton></div></div><YandexMap points={routePoints} routePoints={routePoints} height={480} /></section>
   </PageShell>;
 }
 export default DeliveryPlanningPage;

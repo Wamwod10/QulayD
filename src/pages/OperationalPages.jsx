@@ -1,15 +1,17 @@
 import ImageUploader from "../components/ui/ImageUploader";
 import Select from "../components/ui/Select";
-import { MapPin, Plus } from "lucide-react";
-import { useState } from "react";
+import { MapPin, Pencil, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import SmartTablePage from "../components/prototype/SmartTablePage";
 import { Field, Modal, PageShell, PrimaryButton, SecondaryButton, SectionCard, StatusPill } from "../components/prototype/PrototypeUI";
+import { usePermissions } from "../hooks/usePermissions";
 import { useLocalDb } from "../services/localDb";
 import { apiRequest } from "../services/authService";
 import { getOperationalAgents } from "../services/employeeSelectors";
 import { notify } from "../services/notify";
 import { completeDelivery, completePartialDelivery, failDelivery } from "../services/prototypeActions";
+import { dateKeyForTimeZone } from "../utils/date";
 import { formatMoney, getName } from "../utils/formatters";
 
 export function ContactsPage() {
@@ -52,9 +54,82 @@ export function ContactsPage() {
 
 export function TerritoriesPage() {
   const db = useLocalDb();
-  const rows = db.territories.map((item) => ({ ...item, agent: getName(db.agents, item.agentId) }));
-  return <SmartTablePage title="Hududlar" description="Savdo agentlariga biriktirilgan hududlar." eyebrow="Agentlar" rows={rows} searchFields={["name", "agent"]} columns={[{ key: "name", label: "Hudud", render: (row) => <strong>{row.name}</strong> }, { key: "agent", label: "Agent" }, { key: "customers", label: "Mijozlar soni" }]} />;
+  const { can } = usePermissions();
+  const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState("");
+  const [form, setForm] = useState({ name: "", code: "", status: "ACTIVE" });
+
+  const rows = useMemo(() => (db.territories || []).map((territory) => {
+    const templates = (db.routeTemplates || []).filter((template) => template.territoryId === territory.id && template.status !== "ARCHIVED");
+    const agentIds = [...new Set(templates.map((template) => template.agentId).filter(Boolean))];
+    const customerIds = [...new Set(templates.flatMap((template) => template.stops || []))];
+    return {
+      ...territory,
+      agents: agentIds.map((id) => getName(db.agents, id)).filter((name) => name && name !== "—").join(", "),
+      agentCount: agentIds.length,
+      customers: customerIds.length,
+      templates: templates.length,
+    };
+  }), [db.territories, db.routeTemplates, db.agents]);
+
+  const openCreate = () => {
+    setEditingId("");
+    setForm({ name: "", code: "", status: "ACTIVE" });
+    setOpen(true);
+  };
+
+  const openEdit = (row) => {
+    setEditingId(row.id);
+    setForm({ name: row.name || "", code: row.code || "", status: row.status === "INACTIVE" ? "INACTIVE" : "ACTIVE" });
+    setOpen(true);
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!form.name.trim() || !form.code.trim()) { notify("Hudud nomi va kodini kiriting", "warning"); return; }
+    try {
+      await apiRequest({
+        url: editingId ? `/routes/territories/${editingId}` : "/routes/territories",
+        method: editingId ? "PATCH" : "POST",
+        body: { name: form.name.trim(), code: form.code.trim().toUpperCase(), status: form.status, geometry: {} },
+      });
+      notify(editingId ? "Hudud yangilandi" : "Hudud yaratildi");
+      setOpen(false);
+      setEditingId("");
+    } catch (error) { notify(error.message, "danger"); }
+  };
+
+  return <>
+    <SmartTablePage
+      title="Hududlar"
+      description="Savdo hududlari marshrut shablonlari orqali agent va mijoz nuqtalari bilan bog‘lanadi."
+      eyebrow="Agentlar"
+      rows={rows}
+      searchFields={["name", "code", "agents", "status"]}
+      actions={can("routes.create") ? <PrimaryButton onClick={openCreate}><Plus size={15} /> Hudud yaratish</PrimaryButton> : null}
+      columns={[
+        { key: "name", label: "Hudud", render: (row) => <strong>{row.name}</strong> },
+        { key: "code", label: "Kod" },
+        { key: "agents", label: "Agentlar", render: (row) => row.agents || "—" },
+        { key: "templates", label: "Shablonlar" },
+        { key: "customers", label: "Mijozlar" },
+        { key: "status", label: "Holat", render: (row) => <StatusPill status={row.status} /> },
+        ...(can("routes.update") ? [{ key: "action", label: "Amal", sortable: false, render: (row) => <SecondaryButton type="button" onClick={() => openEdit(row)}><Pencil size={14} /> Tahrirlash</SecondaryButton> }] : []),
+      ]}
+    />
+    <Modal open={open} title={editingId ? "Hududni tahrirlash" : "Yangi hudud"} description="Hudud marshrut shablonlarida tanlanadi; agent va mijozlar o‘sha shablon orqali bog‘lanadi." onClose={() => setOpen(false)}>
+      <form onSubmit={submit} className="qp-stack">
+        <div className="qp-form-grid">
+          <Field label="Hudud nomi"><input className="qp-input" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Masalan, Chilonzor" /></Field>
+          <Field label="Kod"><input className="qp-input" value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value.toUpperCase() })} placeholder="CHIL" /></Field>
+          <Field label="Holat"><Select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="ACTIVE">Faol</option><option value="INACTIVE">Nofaol</option></Select></Field>
+        </div>
+        <div className="qp-form-actions"><SecondaryButton type="button" onClick={() => setOpen(false)}>Bekor qilish</SecondaryButton><PrimaryButton type="submit">Saqlash</PrimaryButton></div>
+      </form>
+    </Modal>
+  </>;
 }
+
 
 export function AgentTodayPage() {
   const db = useLocalDb();
@@ -74,8 +149,8 @@ export function AgentTodayPage() {
 
 export function RoutesTodayPage() {
   const db = useLocalDb();
-  const today = new Date().toISOString().slice(0, 10);
-  const rows = db.routePlans.filter((item) => item.date === today).map((item) => ({ ...item, agent: getName(db.agents, item.agentId), totalStops: item.stops?.length || 0, completedStops: item.stops?.filter((stop) => stop.status === "DONE").length || 0 }));
+  const today = dateKeyForTimeZone(new Date(), db.settings?.company?.timezone || "Asia/Tashkent");
+  const rows = db.routePlans.filter((item) => item.date === today).map((item) => ({ ...item, agent: getName(db.agents, item.agentId), totalStops: item.stops?.length || 0, completedStops: item.stops?.filter((stop) => ["COMPLETED", "DONE", "VISITED"].includes(stop.status)).length || 0 }));
   return <SmartTablePage title="Bugungi marshrutlar" description="Bugun agentlar yurayotgan yo‘nalishlarning tezkor holati." eyebrow="Marshrutlar" rows={rows} searchFields={["name", "agent", "status"]} columns={[{ key: "name", label: "Marshrut", render: (row) => <strong>{row.name}</strong> }, { key: "agent", label: "Agent" }, { key: "totalStops", label: "Jami nuqta" }, { key: "completedStops", label: "Bajarilgan" }, { key: "status", label: "Holat", render: (row) => <StatusPill status={row.status} /> }]} />;
 }
 
@@ -105,7 +180,7 @@ export function PackingPage() {
 
 export function ReadyOrdersPage() {
   const db = useLocalDb();
-  const rows = db.orders.filter((order) => ["READY", "COMPLETED"].includes(order.fulfillmentStatus)).map((order) => ({ ...order, customer: getName(db.customers, order.customerId) }));
+  const rows = db.orders.filter((order) => order.fulfillmentStatus === "FULFILLED").map((order) => ({ ...order, customer: getName(db.customers, order.customerId) }));
   return <SmartTablePage title="Tayyor buyurtmalar" description="Yig‘ish va qadoqlash yakunlangan, delivery rejalashtirishga tayyor buyurtmalar." eyebrow="Tayyorlash" rows={rows} searchFields={["number", "customer"]} columns={[{ key: "number", label: "Buyurtma", render: (row) => <strong>{row.number}</strong> }, { key: "customer", label: "Mijoz" }, { key: "total", label: "Summa", render: (row) => formatMoney(row.total) }, { key: "fulfillmentStatus", label: "Holat", render: (row) => <StatusPill status={row.fulfillmentStatus} /> }]} />;
 }
 

@@ -1,5 +1,5 @@
 export function getInvoiceOutstanding(invoice) {
-  return Math.max(0, Number(invoice?.total || 0) - Number(invoice?.paid || 0));
+  return Math.max(0, Number(invoice?.total || 0) - Number(invoice?.credited || 0) - Number(invoice?.paid || 0));
 }
 
 export function getCustomerOpenInvoices(db, customerId) {

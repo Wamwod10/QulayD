@@ -17,6 +17,7 @@ import { apiRequest } from "../../../services/authService";
 import { getOperationalAgents } from "../../../services/employeeSelectors";
 import { notify } from "../../../services/notify";
 import { collectPayment } from "../../../services/prototypeActions";
+import { dateKeyForTimeZone } from "../../../utils/date";
 import { formatMoney, getName, shortDate } from "../../../utils/formatters";
 import { getLabel } from "../../../utils/labels";
 
@@ -66,7 +67,7 @@ function VisitsPage() {
 
   const allowedCustomers = useMemo(() => {
     if (db.settings.agents.allowOutsideRoute !== false || !startForm.agentId) return db.customers;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = dateKeyForTimeZone(new Date(), db.settings?.company?.timezone || "Asia/Tashkent");
     const plan = db.routePlans.find((item) => item.date === today && item.agentId === startForm.agentId);
     const allowedIds = new Set((plan?.stops || []).map((stop) => stop.customerId));
     return db.customers.filter((customer) => allowedIds.has(customer.id));
@@ -102,8 +103,10 @@ function VisitsPage() {
       const geofence = validateVisitGeofence(db, startForm.customerId, gps);
       if (!geofence.ok) { notify(`Mijoz joylashuvidan ${Math.round(geofence.distance)} m uzoqdasiz. Ruxsat etilgan masofa ${geofence.limit} m.`, "danger"); return; }
       const visit = await apiRequest({ url: "/visits", body: { employeeId: startForm.agentId, customerId: startForm.customerId } });
-      const customer = db.customers.find((item) => item.id === startForm.customerId);
-      await apiRequest({ url: `/visits/${visit.id}/check-in`, body: { latitude: Number(gps.latitude ?? customer?.latitude ?? 0), longitude: Number(gps.longitude ?? customer?.longitude ?? 0) } });
+      const location = gps.latitude !== undefined && gps.longitude !== undefined
+        ? { latitude: Number(gps.latitude), longitude: Number(gps.longitude) }
+        : {};
+      await apiRequest({ url: `/visits/${visit.id}/check-in`, body: location });
       setStartOpen(false);
       notify("Tashrif boshlandi");
     } catch (error) {
@@ -136,8 +139,10 @@ function VisitsPage() {
           return;
         }
       }
-      const customer = db.customers.find((item) => item.id === visit.customerId);
-      await apiRequest({ url: `/visits/${visit.id}/check-out`, body: { latitude: Number(gps.latitude ?? customer?.latitude ?? 0), longitude: Number(gps.longitude ?? customer?.longitude ?? 0), note: [finishForm.result, finishForm.note.trim()].filter(Boolean).join(": ") } });
+      const location = gps.latitude !== undefined && gps.longitude !== undefined
+        ? { latitude: Number(gps.latitude), longitude: Number(gps.longitude) }
+        : {};
+      await apiRequest({ url: `/visits/${visit.id}/check-out`, body: { ...location, note: [finishForm.result, finishForm.note.trim()].filter(Boolean).join(": ") } });
       setFinishVisitId("");
       setFinishForm({ result: "NO_ORDER", amount: "", method: "CASH", note: "" });
       notify("Tashrif yakunlandi");

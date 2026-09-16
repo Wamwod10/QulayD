@@ -84,11 +84,14 @@ export function generateUniqueSku(products = [], excludeProductId = "") {
     const candidate = randomDigits(5);
     if (!existing.has(candidate)) return candidate;
   }
-  for (let value = 0; value < 100000; value += 1) {
-    const candidate = String(value).padStart(5, "0");
+  const numeric = [...existing].filter((value) => /^\d+$/.test(value)).map(Number).filter(Number.isFinite);
+  let candidate = String((numeric.length ? Math.max(...numeric) : 99999) + 1);
+  if (!existing.has(candidate)) return candidate;
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    candidate = `SKU-${Date.now().toString(36).toUpperCase()}-${randomDigits(3)}`;
     if (!existing.has(candidate)) return candidate;
   }
-  throw new Error("Barcha 5 xonali SKU qiymatlari band");
+  throw new Error("Yangi unikal SKU yaratib bo‘lmadi");
 }
 
 export function generateUniqueEan13(products = [], excludeProductId = "") {

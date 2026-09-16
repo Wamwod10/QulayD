@@ -9,21 +9,29 @@ import { useLocalDb } from "../../../services/localDb";
 import { apiRequest } from "../../../services/authService";
 import { notify } from "../../../services/notify";
 import { getName, shortDate } from "../../../utils/formatters";
-import { findProductByScan, getProductBarcodes } from "../../../utils/productCodes";
+import { findProductSelectionByScan, getProductBarcodes } from "../../../utils/productCodes";
 
 function createDraftItems(db, warehouseId) {
   return db.products
     .filter((product) => product.status === "ACTIVE")
-    .map((product) => {
-      const balance = db.balances.find((item) => item.warehouseId === warehouseId && item.productId === product.id);
-      const tracked = Boolean(product.trackSerial || product.trackLot || product.trackExpiry);
-      return {
-        productId: product.id,
-        systemQty: Number(balance?.onHand || 0),
-        countedQty: tracked ? String(Number(balance?.onHand || 0)) : "",
-        tracked,
-        note: "",
+    .flatMap((product) => {
+      const variants = (product.variants || []).filter((variant) => variant.status === "ACTIVE");
+      const buildLine = (variant = null) => {
+        const stockKey = variant?.id || "BASE";
+        const productStock = (product.stocks || []).find((item) => item.warehouseId === warehouseId && (item.stockKey || "BASE") === stockKey);
+        const baseBalance = !variant ? db.balances.find((item) => item.warehouseId === warehouseId && item.productId === product.id) : null;
+        return {
+          lineKey: `${product.id}:${stockKey}`,
+          productId: product.id,
+          variantId: variant?.id || null,
+          variantName: variant?.name || "",
+          systemQty: Number(productStock?.onHand ?? baseBalance?.onHand ?? 0),
+          countedQty: "",
+          tracked: Boolean(product.trackSerial || product.trackLot || product.trackExpiry),
+          note: "",
+        };
       };
+      return variants.length ? variants.map((variant) => buildLine(variant)) : [buildLine()];
     });
 }
 
@@ -35,6 +43,7 @@ function InventoryCountsPage() {
   const [warehouseId, setWarehouseId] = useState(db.settings.company.defaultWarehouseId || db.warehouses[0]?.id || "");
   const [query, setQuery] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannedSerialIds, setScannedSerialIds] = useState(() => new Set());
   const [items, setItems] = useState(() => createDraftItems(db, db.settings.company.defaultWarehouseId || db.warehouses[0]?.id || ""));
 
   const rows = db.inventoryCounts.map((item) => ({
@@ -49,6 +58,7 @@ function InventoryCountsPage() {
     setCountStatus("");
     setWarehouseId(nextWarehouse);
     setItems(createDraftItems(db, nextWarehouse));
+    setScannedSerialIds(new Set());
     setQuery("");
     setOpen(true);
   };
@@ -58,9 +68,14 @@ function InventoryCountsPage() {
     setCountStatus(row.status || "");
     setWarehouseId(row.warehouseId);
     setItems((row.items?.length ? row.items : createDraftItems(db, row.warehouseId)).map((item) => {
-      const product = db.products.find((entry) => entry.id === item.productId); const tracked = Boolean(product?.trackSerial || product?.trackLot || product?.trackExpiry);
-      const systemQty = Number(item.systemQty ?? item.expected ?? 0); return { ...item, systemQty, tracked, countedQty: tracked && (item.countedQty == null || item.countedQty === "") ? String(systemQty) : (item.countedQty ?? "") };
+      const product = db.products.find((entry) => entry.id === item.productId);
+      const variant = (product?.variants || []).find((entry) => entry.id === item.variantId);
+      const stockKey = item.variantId || item.stockKey || "BASE";
+      const systemQty = Number(item.systemQty ?? item.expected ?? 0);
+      return { ...item, lineKey: `${item.productId}:${stockKey}`, variantId: item.variantId || null, variantName: item.variant?.name || variant?.name || "",
+        systemQty, tracked: Boolean(product?.trackSerial || product?.trackLot || product?.trackExpiry), countedQty: item.countedQty ?? item.counted ?? "" };
     }));
+    setScannedSerialIds(new Set());
     setQuery("");
     setOpen(true);
   };
@@ -69,10 +84,11 @@ function InventoryCountsPage() {
     if (countId) return;
     setWarehouseId(nextWarehouseId);
     setItems(createDraftItems(db, nextWarehouseId));
+    setScannedSerialIds(new Set());
   };
 
-  const setCounted = (productId, value) => {
-    setItems((current) => current.map((item) => item.productId === productId ? { ...item, countedQty: value } : item));
+  const setCounted = (lineKey, value) => {
+    setItems((current) => current.map((item) => item.lineKey === lineKey ? { ...item, countedQty: value } : item));
   };
 
   const filteredItems = useMemo(() => {
@@ -80,31 +96,44 @@ function InventoryCountsPage() {
     if (!normalized) return items;
     return items.filter((item) => {
       const product = db.products.find((entry) => entry.id === item.productId);
-      return `${product?.name || ""} ${product?.sku || ""} ${getProductBarcodes(product).join(" ")}`.toLowerCase().includes(normalized);
+      const variant = (product?.variants || []).find((entry) => entry.id === item.variantId);
+      return `${product?.name || ""} ${product?.sku || ""} ${item.variantName || variant?.name || ""} ${variant?.sku || ""} ${getProductBarcodes(product).join(" ")} ${getProductBarcodes(variant).join(" ")}`.toLowerCase().includes(normalized);
     });
   }, [db.products, items, query]);
 
   const scanProduct = (rawValue) => {
-    const product = findProductByScan(db.products.filter((item) => item.status === "ACTIVE"), rawValue);
+    const selection = findProductSelectionByScan(db.products.filter((item) => item.status === "ACTIVE"), rawValue);
+    const product = selection?.product;
     if (!product) {
       notify("Skanerlangan kod bo‘yicha mahsulot topilmadi", "warning");
       return false;
     }
-    if (!items.some((item) => item.productId === product.id)) {
-      notify("Bu mahsulot tanlangan ombor inventarizatsiyasida yo‘q", "warning");
+    const activeVariants = (product.variants || []).filter((variant) => variant.status === "ACTIVE");
+    const variantId = selection?.serial?.variantId || selection?.variant?.id || selection?.package?.variantId || null;
+    if (activeVariants.length && !variantId) {
+      notify("Variantli mahsulotda variant shtrix-kodi yoki serial/IMEI ni skanerlang", "warning");
       return false;
     }
-    if (product.trackSerial || product.trackLot || product.trackExpiry) {
-      notify("Tracked mahsulot farqi Qoldiq tuzatish bo‘limida lot/serial bilan kiritiladi", "info");
+    const lineKey = `${product.id}:${variantId || "BASE"}`;
+    if (!items.some((item) => item.lineKey === lineKey)) {
+      notify("Bu mahsulot/variant tanlangan ombor inventarizatsiyasida yo‘q", "warning");
       return false;
+    }
+    if (selection?.serial?.id) {
+      if (scannedSerialIds.has(selection.serial.id)) {
+        notify("Bu serial / IMEI allaqachon sanalgan", "warning");
+        return false;
+      }
+      setScannedSerialIds((current) => new Set([...current, selection.serial.id]));
     }
     setItems((current) => current.map((item) => {
-      if (item.productId !== product.id) return item;
+      if (item.lineKey !== lineKey) return item;
       const currentQty = item.countedQty === "" || item.countedQty === null ? 0 : Number(item.countedQty || 0);
-      return { ...item, countedQty: String(currentQty + 1) };
+      const increment = Number(selection?.package?.conversionToBase || 1);
+      return { ...item, countedQty: String(currentQty + increment) };
     }));
     setQuery("");
-    notify(`${product.name}: sanalgan miqdor +1`);
+    notify(`${product.name}${selection?.variant?.name ? ` · ${selection.variant.name}` : ""}: sanalgan miqdor qo‘shildi`);
     return true;
   };
 
@@ -119,7 +148,7 @@ function InventoryCountsPage() {
 
   const saveDraft = async () => {
     if (countStatus === "COMPLETED") { notify("Yakunlangan inventarizatsiyani o‘zgartirib bo‘lmaydi", "warning"); return null; }
-    const lines = items.map((line) => ({ productId: line.productId, counted: line.countedQty === "" || line.countedQty == null ? null : Number(line.countedQty) }));
+    const lines = items.map((line) => ({ productId: line.productId, variantId: line.variantId || null, counted: line.countedQty === "" || line.countedQty == null ? null : Number(line.countedQty) }));
     try {
       if (countId) { await apiRequest({ url: `/inventory/counts/${countId}`, method: "PATCH", body: { items: lines } }); notify("Inventarizatsiya qoralamasi yangilandi"); return countId; }
       const created = await apiRequest({ url: "/inventory/counts", body: { warehouseId, items: lines } }); setCountId(created.id); setCountStatus(created.status || "IN_PROGRESS"); notify("Inventarizatsiya qoralamasi saqlandi"); return created.id;
@@ -190,11 +219,12 @@ function InventoryCountsPage() {
               const product = db.products.find((item) => item.id === line.productId);
               const hasCount = line.countedQty !== "" && line.countedQty !== null;
               const diff = hasCount ? Number(line.countedQty) - Number(line.systemQty || 0) : null;
-              return <tr key={line.productId}>
-                <td><strong>{product?.name || "Mahsulot"}</strong></td>
-                <td><span className="qp-muted">{product?.sku || "—"}</span></td>
+              const variant = (product?.variants || []).find((item) => item.id === line.variantId);
+              return <tr key={line.lineKey}>
+                <td><strong>{product?.name || "Mahsulot"}</strong>{line.variantName || variant?.name ? <div className="qp-muted">{line.variantName || variant?.name}</div> : null}</td>
+                <td><span className="qp-muted">{variant?.sku || product?.sku || "—"}</span></td>
                 <td><strong>{line.systemQty}</strong></td>
-                <td><input className="qp-input qp-count-input" type="number" min="0" value={line.countedQty} disabled={countStatus === "COMPLETED" || Boolean(product?.trackSerial || product?.trackLot || product?.trackExpiry)} title={product?.trackSerial || product?.trackLot || product?.trackExpiry ? "Tracked mahsulot farqi Qoldiq tuzatish orqali lot/serial bilan kiritiladi" : undefined} onChange={(event) => setCounted(line.productId, event.target.value)} placeholder="0" /></td>
+                <td><input className="qp-input qp-count-input" type="number" min="0" step="0.001" value={line.countedQty} disabled={countStatus === "COMPLETED"} title={line.tracked ? "Serial/lot mahsulotni real sanang. Farq bo‘lsa tracking ma’lumoti bilan Qoldiq tuzatish orqali hal qilinadi." : undefined} onChange={(event) => setCounted(line.lineKey, event.target.value)} placeholder="0" /></td>
                 <td>{diff === null ? <span className="qp-muted">—</span> : <strong className={diff === 0 ? "qp-text-success" : "qp-text-warning"}>{diff > 0 ? `+${diff}` : diff}</strong>}</td>
               </tr>;
             })}</tbody>
@@ -203,7 +233,7 @@ function InventoryCountsPage() {
 
         <div className="qp-form-actions qp-count-actions">
           {countStatus === "COMPLETED" ? <SecondaryButton type="button" onClick={() => setOpen(false)}>Yopish</SecondaryButton> : <>
-            <SecondaryButton type="button" onClick={() => { setItems(createDraftItems(db, warehouseId)); notify("Sanash maydonlari qayta tiklandi", "info"); }}><RotateCcw size={15} /> Qayta boshlash</SecondaryButton>
+            <SecondaryButton type="button" onClick={() => { setItems(createDraftItems(db, warehouseId)); setScannedSerialIds(new Set()); notify("Sanash maydonlari qayta tiklandi", "info"); }}><RotateCcw size={15} /> Qayta boshlash</SecondaryButton>
             <SecondaryButton type="button" onClick={saveDraft}><ClipboardCheck size={15} /> Qoralama saqlash</SecondaryButton>
             <PrimaryButton type="button" onClick={finalize}><CheckCircle2 size={16} /> Inventarizatsiyani yakunlash</PrimaryButton>
           </>}

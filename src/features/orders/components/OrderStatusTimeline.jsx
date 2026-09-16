@@ -11,8 +11,8 @@ function state(done, active, failed = false) {
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function getOrderLifecycleStages(order = {}) {
-  const preparing = ["RESERVED", "PICKING", "PICKED", "PACKING", "PACKED", "READY", "COMPLETED"].includes(order.fulfillmentStatus);
-  const prepared = ["READY", "COMPLETED"].includes(order.fulfillmentStatus);
+  const preparing = ["RESERVED", "PICKING", "PICKED", "PACKING", "PACKED", "FULFILLED"].includes(order.fulfillmentStatus);
+  const prepared = ["FULFILLED"].includes(order.fulfillmentStatus);
   const delivering = ["PLANNED", "OUT_FOR_DELIVERY", "ARRIVED", "PARTIALLY_DELIVERED", "DELIVERED"].includes(order.deliveryStatus);
   const delivered = ["DELIVERED"].includes(order.deliveryStatus);
   const problem = order.deliveryStatus === "FAILED" || order.status === "CANCELLED";
